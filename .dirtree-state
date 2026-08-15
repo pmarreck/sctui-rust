@@ -1,7 +1,9 @@
 # Dirtree: Stateful directory trees in the CLI for humans and LLMs. https://github.com/pmarreck/dirtree
 ver=1.2
 annotate=[
+	.mechatron-prime/targets = Selects the exact x86_64-linux flake check built by Mechatron Prime CI.
 	PLAN.md = Tracks current work items, edge cases, and completion times.
+	README.md = Documents sctui features, limitations, licensing, and live Mechatron Prime CI status.
 	flake.lock = Locks nixpkgs for reproducible flake evaluation and builds.
 	flake.nix = Pinned hermetic Nix build; installs the Rust executable at $out/bin/sctui.
 ]

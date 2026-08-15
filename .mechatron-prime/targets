@@ -1,0 +1,2 @@
+# The default check builds, tests, and installs sctui.
+checks.x86_64-linux.default
