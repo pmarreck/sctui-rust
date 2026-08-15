@@ -26,6 +26,8 @@
 - [x] Run the full suite and Nix build, then update documentation and `dirtree` notes. (2026-08-15 03:21 PM EDT)
   - Curiosity poke: distinguish a valid build from live authentication, and avoid printing browser-cookie values during either check.
   - Result: all 14 tests and `checks.x86_64-linux.default` pass; a no-environment-variable probe reached TUI initialization through a live Firefox session without exposing the cookie.
-- [ ] Commit and push the Firefox fallback, then verify Mechatron Prime on the implementation commit.
+- [x] Commit and push the Firefox fallback. (2026-08-15 03:23 PM EDT)
   - Curiosity poke: keep Peter's local credential files out of Git and verify the exact pushed commit rather than a moving branch.
+- [ ] Verify Mechatron Prime on the pushed implementation.
   - Dependency: live Mechatron verification requires the still-unprovisioned signed webhook above.
+  - Current state: `origin/main` contains implementation commit `cba90c7`; no matching webhook exists and the badge endpoint returns HTTP 404.
