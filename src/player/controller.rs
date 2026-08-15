@@ -92,10 +92,12 @@ impl Player {
         let _ = self.tx.send(PlayerCommand::VolumeDown);
     }
 
+    #[allow(dead_code)]
     pub fn next_song(&self) {
         let _ = self.tx.send(PlayerCommand::NextSong);
     }
 
+    #[allow(dead_code)]
     pub fn prev_song(&self) {
         let _ = self.tx.send(PlayerCommand::PrevSong);
     }

@@ -14,6 +14,7 @@ pub(crate) struct StreamsResponse {
 #[derive(Debug, Clone)]
 pub(crate) struct HlsSegment {
     pub url: Url,
+    #[allow(dead_code)]
     pub duration_ms: u64,
 }
 
@@ -52,7 +53,10 @@ impl HlsManifest {
         for _ in 0..5 {
             let playlist_content = client
                 .get(url.as_str())
-                .bearer_auth(access_token)
+                .header(
+                    reqwest::header::AUTHORIZATION,
+                    crate::auth::authorization_header(access_token),
+                )
                 .send()
                 .with_context(|| format!("failed to fetch playlist {}", url))?
                 .error_for_status()

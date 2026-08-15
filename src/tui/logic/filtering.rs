@@ -4,6 +4,7 @@ use super::state::{AppData, AppState};
 
 pub struct FilteredViews {
     pub likes: Vec<Track>,
+    #[allow(dead_code)]
     pub playlists: Vec<Playlist>,
     pub playlist_tracks: Vec<Track>,
     pub albums: Vec<Album>,

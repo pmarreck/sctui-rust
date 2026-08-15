@@ -61,7 +61,10 @@ impl PlaybackEngine {
         let streams_response: StreamsResponse = self
             .client
             .get(&streams_url)
-            .bearer_auth(access_token)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                crate::auth::authorization_header(access_token),
+            )
             .send()
             .context("failed to fetch streams endpoint")?
             .error_for_status()

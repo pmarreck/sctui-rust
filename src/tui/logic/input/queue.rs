@@ -1,5 +1,4 @@
 use super::helpers::insert_manual_queue;
-use crate::api::Track;
 use crate::tui::logic::state::{AppData, AppState, PlaybackSource, QueuedTrack, FollowingTracksFocus};
 
 pub(crate) fn handle_add_to_queue(

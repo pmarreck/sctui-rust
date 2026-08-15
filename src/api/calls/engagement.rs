@@ -11,7 +11,10 @@ pub async fn like_track(token: Arc<Mutex<Token>>, track_id: u64) -> anyhow::Resu
 
     reqwest::Client::new()
         .post(url)
-        .bearer_auth(access_token)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
         .send()
         .await?
         .error_for_status()?;
@@ -27,7 +30,10 @@ pub async fn unlike_track(token: Arc<Mutex<Token>>, track_id: u64) -> anyhow::Re
 
     reqwest::Client::new()
         .delete(url)
-        .bearer_auth(access_token)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
         .send()
         .await?
         .error_for_status()?;
@@ -43,7 +49,10 @@ pub async fn like_playlist(token: Arc<Mutex<Token>>, playlist_id: u64) -> anyhow
 
     reqwest::Client::new()
         .post(url)
-        .bearer_auth(access_token)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
         .send()
         .await?
         .error_for_status()?;
@@ -59,7 +68,10 @@ pub async fn unlike_playlist(token: Arc<Mutex<Token>>, playlist_id: u64) -> anyh
 
     reqwest::Client::new()
         .delete(url)
-        .bearer_auth(access_token)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
         .send()
         .await?
         .error_for_status()?;
@@ -75,7 +87,10 @@ pub async fn follow_user(token: Arc<Mutex<Token>>, user_id: u64) -> anyhow::Resu
 
     reqwest::Client::new()
         .put(url)
-        .bearer_auth(access_token)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
         .send()
         .await?
         .error_for_status()?;
@@ -91,11 +106,13 @@ pub async fn unfollow_user(token: Arc<Mutex<Token>>, user_id: u64) -> anyhow::Re
 
     reqwest::Client::new()
         .delete(url)
-        .bearer_auth(access_token)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
         .send()
         .await?
         .error_for_status()?;
 
     Ok(())
 }
-

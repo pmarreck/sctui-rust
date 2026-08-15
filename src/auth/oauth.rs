@@ -13,6 +13,49 @@ use super::token::Token;
 static CODE_VERIFIER_LEN: usize = 64;
 static STATE_LEN: usize = 56;
 
+#[derive(Debug)]
+pub(super) struct ApplicationCredentials {
+    pub client_id: String,
+    pub client_secret: String,
+}
+
+impl ApplicationCredentials {
+    /// Classifies the complete environment pair separately from an absent pair,
+    /// rejecting partial configuration before any browser fallback occurs.
+    fn from_values(
+        client_id: Option<String>,
+        client_secret: Option<String>,
+    ) -> Result<Option<Self>> {
+        let client_id = client_id.filter(|value| !value.is_empty());
+        let client_secret = client_secret.filter(|value| !value.is_empty());
+        match (client_id, client_secret) {
+            (Some(client_id), Some(client_secret)) => Ok(Some(Self {
+                client_id,
+                client_secret,
+            })),
+            (None, None) => Ok(None),
+            (Some(_), None) => Err(anyhow!("SOUNDCLOUD_CLIENT_SECRET is not set")),
+            (None, Some(_)) => Err(anyhow!("SOUNDCLOUD_CLIENT_ID is not set")),
+        }
+    }
+
+    pub(super) fn from_environment() -> Result<Option<Self>> {
+        dotenvy::dotenv().ok();
+        Self::from_values(
+            optional_environment_value("SOUNDCLOUD_CLIENT_ID")?,
+            optional_environment_value("SOUNDCLOUD_CLIENT_SECRET")?,
+        )
+    }
+}
+
+fn optional_environment_value(name: &str) -> Result<Option<String>> {
+    match std::env::var(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => Err(anyhow!("{name} is not valid UTF-8")),
+    }
+}
+
 fn generate_code_verifier() -> String {
     rand::thread_rng()
         .sample_iter(&Alphanumeric)
@@ -35,9 +78,14 @@ fn generate_state() -> String {
 }
 
 pub fn authenticate() -> Result<Token> {
-    dotenvy::dotenv().ok();
-    let client_id = std::env::var("SOUNDCLOUD_CLIENT_ID")?;
-    let client_secret = std::env::var("SOUNDCLOUD_CLIENT_SECRET")?;
+    let credentials = ApplicationCredentials::from_environment()?
+        .ok_or_else(|| anyhow!("SoundCloud application credentials are not set"))?;
+    authenticate_with(&credentials)
+}
+
+pub(super) fn authenticate_with(credentials: &ApplicationCredentials) -> Result<Token> {
+    let client_id = &credentials.client_id;
+    let client_secret = &credentials.client_secret;
     let redirect_uri = "http://127.0.0.1:8080/callback";
     let code_verifier = generate_code_verifier();
     let code_challenge = generate_code_challenge(&code_verifier);
@@ -122,4 +170,50 @@ pub fn authenticate() -> Result<Token> {
     fs::write("token.json", serde_json::to_string_pretty(&resp)?)?;
 
     Ok(resp)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ApplicationCredentials;
+
+    #[test]
+    fn environment_inputs_are_classified_as_complete_absent_or_partial() {
+        let complete =
+            ApplicationCredentials::from_values(Some("client".into()), Some("secret".into()))
+                .unwrap()
+                .unwrap();
+        assert_eq!(complete.client_id, "client");
+        assert_eq!(complete.client_secret, "secret");
+
+        for (client_id, client_secret) in [
+            (None, None),
+            (Some(String::new()), None),
+            (None, Some(String::new())),
+            (Some(String::new()), Some(String::new())),
+        ] {
+            assert!(
+                ApplicationCredentials::from_values(client_id, client_secret)
+                    .unwrap()
+                    .is_none()
+            );
+        }
+
+        for (client_id, client_secret, missing) in [
+            (Some("client".into()), None, "SOUNDCLOUD_CLIENT_SECRET"),
+            (None, Some("secret".into()), "SOUNDCLOUD_CLIENT_ID"),
+            (
+                Some("client".into()),
+                Some(String::new()),
+                "SOUNDCLOUD_CLIENT_SECRET",
+            ),
+            (
+                Some(String::new()),
+                Some("secret".into()),
+                "SOUNDCLOUD_CLIENT_ID",
+            ),
+        ] {
+            let error = ApplicationCredentials::from_values(client_id, client_secret).unwrap_err();
+            assert!(error.to_string().contains(missing));
+        }
+    }
 }

@@ -26,6 +26,7 @@ impl VisualizerMode {
         }
     }
 
+    #[allow(dead_code)]
     pub fn label(self) -> &'static str {
         match self {
             Self::Oscilloscope => "Oscilloscope",

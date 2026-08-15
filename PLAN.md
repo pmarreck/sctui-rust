@@ -10,7 +10,7 @@
   - Curiosity poke: avoid accessing or logging live Firefox secrets; assess profile locking, schema drift, OS portability, and token expiry.
   - Finding: the Go fork queries Firefox `cookies.sqlite` for SoundCloud's `oauth_token`, then sends it as `Authorization: OAuth …` without a refresh token.
   - Finding: Rust needs a non-refreshable browser-session credential mode and centralized `OAuth` header construction; its current unconditional refresh thread and repeated `bearer_auth` calls are incompatible.
-  - Finding: two local Firefox cookie databases were inspected without selecting secret values; neither currently contains a SoundCloud cookie.
+  - Finding: an early inspection of two local Firefox databases found no SoundCloud rows; the final live probe later found a usable session through the complete profile search.
 - [x] Fork `Illogicalll/sctui` into Peter's GitHub account and configure this checkout with distinct fork and upstream remotes. (2026-08-15 02:23 PM EDT)
   - Curiosity poke: detect an existing fork first, preserve fetch access to upstream, and do not disturb the passing local commit.
   - Result: `pmarreck/sctui-rust` is the fork, `origin` points to it, and `upstream` retains `Illogicalll/sctui`.
@@ -19,9 +19,13 @@
 - [ ] Provision and verify the signed GitHub push webhook for `pmarreck/sctui-rust`.
   - Curiosity poke: perform the required all-owner dry run first and never expose the webhook secret.
   - Dependency: the canonical dry run requires interactive `sudo`; this agent session has no sudo authentication. The fork currently has no Mechatron hook and its badge endpoint returns HTTP 404.
-- [ ] Add deterministic tests for Firefox profile discovery, live-database snapshot handling, credential precedence, and non-refreshable browser sessions.
+- [x] Add deterministic tests for Firefox profile discovery, live-database snapshot handling, credential precedence, and non-refreshable browser sessions. (2026-08-15 03:13 PM EDT)
   - Curiosity poke: classify complete input sets, preserve existing `token.json` compatibility, and keep live credentials out of fixtures and diagnostics.
-- [ ] Implement Firefox SoundCloud session fallback when application credentials are absent.
+- [x] Implement Firefox SoundCloud session fallback when application credentials are absent. (2026-08-15 03:13 PM EDT)
   - Curiosity poke: centralize SoundCloud's `Authorization: OAuth …` header, handle browser-session expiry without a refresh token, and keep the Nix output hermetic.
-- [ ] Run the full suite and Nix build, update documentation and `dirtree` notes, commit, push, and verify Mechatron Prime on the implementation commit.
-  - Curiosity poke: distinguish a valid build from live authentication, because the current Firefox profiles contain no SoundCloud cookie to smoke-test.
+- [x] Run the full suite and Nix build, then update documentation and `dirtree` notes. (2026-08-15 03:21 PM EDT)
+  - Curiosity poke: distinguish a valid build from live authentication, and avoid printing browser-cookie values during either check.
+  - Result: all 14 tests and `checks.x86_64-linux.default` pass; a no-environment-variable probe reached TUI initialization through a live Firefox session without exposing the cookie.
+- [ ] Commit and push the Firefox fallback, then verify Mechatron Prime on the implementation commit.
+  - Curiosity poke: keep Peter's local credential files out of Git and verify the exact pushed commit rather than a moving branch.
+  - Dependency: live Mechatron verification requires the still-unprovisioned signed webhook above.

@@ -1,7 +1,6 @@
 use ratatui::crossterm::event::{KeyEvent, KeyModifiers};
 
 use super::InputOutcome;
-use crate::api::Track;
 use crate::player::Player;
 use crate::tui::logic::state::{AppData, AppState, FollowingTracksFocus, PlaybackSource};
 use crate::tui::logic::utils::{build_queue, build_search_matches};

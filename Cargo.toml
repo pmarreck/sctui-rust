@@ -31,3 +31,5 @@ image = "0.25.9"
 dasp_sample = "0.11"
 m3u8-rs = "6.0"
 rustfft = "6.4.1"
+rusqlite = { version = "0.40", features = ["bundled"] }
+tempfile = "3"

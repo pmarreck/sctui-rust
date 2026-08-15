@@ -72,7 +72,10 @@ pub async fn fetch_search_tracks(
             ("limit", "50"),
             ("access", "playable,preview,blocked"),
         ])
-        .bearer_auth(access_token)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
         .send()
         .await?
         .error_for_status()?
@@ -98,7 +101,10 @@ pub async fn fetch_search_albums(
             ("limit", "50"),
             ("show_tracks", "false"),
         ])
-        .bearer_auth(access_token)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
         .send()
         .await?
         .error_for_status()?
@@ -151,7 +157,10 @@ pub async fn fetch_search_playlists(
             ("limit", "50"),
             ("show_tracks", "false"),
         ])
-        .bearer_auth(access_token)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
         .send()
         .await?
         .error_for_status()?
@@ -200,7 +209,10 @@ pub async fn fetch_search_people(
             ("linked_partitioning", "true"),
             ("limit", "50"),
         ])
-        .bearer_auth(access_token)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
         .send()
         .await?
         .error_for_status()?
@@ -219,4 +231,3 @@ pub async fn fetch_search_people(
 
     Ok(people)
 }
-

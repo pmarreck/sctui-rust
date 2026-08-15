@@ -41,7 +41,10 @@ impl API {
             }
             let resp: serde_json::Value = Client::new()
                 .get(url)
-                .bearer_auth(&token_guard.access_token)
+                .header(
+                    reqwest::header::AUTHORIZATION,
+                    crate::auth::authorization_header(&token_guard.access_token),
+                )
                 .send()?
                 .error_for_status()?
                 .json()?;
@@ -95,6 +98,7 @@ impl API {
         Ok(playlists)
     }
 
+    #[allow(dead_code)]
     pub fn get_playlist_tracks(&mut self, tracks_uri: &str) -> anyhow::Result<Vec<Track>> {
         let _ = try_refresh_token(&self.token);
 
@@ -118,7 +122,10 @@ impl API {
 
         let resp: serde_json::Value = Client::new()
             .get(&url)
-            .bearer_auth(&token_guard.access_token)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                crate::auth::authorization_header(&token_guard.access_token),
+            )
             .send()?
             .error_for_status()?
             .json()?;
@@ -203,7 +210,10 @@ pub async fn fetch_playlist_tracks(
 
     let resp: serde_json::Value = reqwest::Client::new()
         .get(&url)
-        .bearer_auth(access_token)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
         .send()
         .await?
         .error_for_status()?

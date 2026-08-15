@@ -103,7 +103,7 @@ pub fn build_search_matches(
     selected_subtab: usize,
     query: &str,
     likes: &Vec<Track>,
-    playlists: &Vec<Playlist>,
+    _playlists: &Vec<Playlist>,
     playlist_tracks: &Vec<Track>,
     albums: &Vec<Album>,
     following: &Vec<Artist>,

@@ -1,9 +1,12 @@
 # Dirtree: Stateful directory trees in the CLI for humans and LLMs. https://github.com/pmarreck/dirtree
 ver=1.2
 annotate=[
-	.mechatron-prime/targets = Selects the exact x86_64-linux flake check built by Mechatron Prime CI.
+	.mechatron-prime/targets = Declares the exact x86_64-linux Nix check built by Mechatron Prime.
 	PLAN.md = Tracks current work items, edge cases, and completion times.
 	README.md = Documents sctui features, limitations, licensing, and live Mechatron Prime CI status.
 	flake.lock = Locks nixpkgs for reproducible flake evaluation and builds.
 	flake.nix = Pinned hermetic Nix build; installs the Rust executable at $out/bin/sctui.
+	src/auth/firefox.rs = Finds SoundCloud OAuth cookies in private snapshots of Firefox profile databases.
+	src/auth/mod.rs = Selects startup credentials by saved-token, app OAuth, then Firefox fallback precedence.
+	src/auth/token.rs = Models refreshable application tokens and non-refreshable Firefox session tokens; builds OAuth headers.
 ]

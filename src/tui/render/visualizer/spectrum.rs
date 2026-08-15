@@ -63,7 +63,7 @@ fn spectrum_state() -> &'static Mutex<SpectrumState> {
     SPECTRUM_STATE.get_or_init(|| Mutex::new(SpectrumState::default()))
 }
 
-pub fn render_spectrum_bars(frame: &mut Frame, area: Rect, samples: &[f32], mode: VisualizerMode) {
+pub fn render_spectrum_bars(frame: &mut Frame, area: Rect, samples: &[f32], _mode: VisualizerMode) {
     let block = Block::default()
         .title("sctui")
         .title_alignment(ratatui::layout::Alignment::Center)
@@ -321,9 +321,10 @@ fn draw_spectrum_bars(
                     row_from_bottom as f32 / (height - 1) as f32
                 };
                 let color = gradient_cyan_magenta(t);
-                buf.get_mut(x, y)
-                    .set_symbol(symbol)
-                    .set_style(Style::default().fg(color));
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_symbol(symbol)
+                        .set_style(Style::default().fg(color));
+                }
             }
         }
 

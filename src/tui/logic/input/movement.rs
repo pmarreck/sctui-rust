@@ -109,7 +109,7 @@ fn handle_following_down(key: KeyEvent, state: &mut AppState, data: &mut AppData
     }
 }
 
-fn handle_alt_down(key: KeyEvent, state: &mut AppState, data: &mut AppData) {
+fn handle_alt_down(_key: KeyEvent, state: &mut AppState, data: &mut AppData) {
     let max_rows = table_rows_count(state.selected_subtab, data);
     let max_info_rows = info_table_rows_count();
     if state.selected_tab == 2 && state.info_pane_selected {
@@ -128,7 +128,7 @@ fn handle_alt_down(key: KeyEvent, state: &mut AppState, data: &mut AppData) {
     }
 }
 
-fn handle_normal_down(key: KeyEvent, state: &mut AppState, data: &mut AppData) {
+fn handle_normal_down(_key: KeyEvent, state: &mut AppState, data: &mut AppData) {
     let max_rows = table_rows_count(state.selected_subtab, data);
     let max_info_rows = info_table_rows_count();
     if state.selected_tab == 2
@@ -213,7 +213,7 @@ fn handle_following_up(key: KeyEvent, state: &mut AppState, data: &mut AppData) 
     }
 }
 
-fn handle_alt_up(key: KeyEvent, state: &mut AppState, data: &mut AppData) {
+fn handle_alt_up(_key: KeyEvent, state: &mut AppState, data: &mut AppData) {
     if state.selected_tab == 2 && state.info_pane_selected {
         state.selected_info_row = state.selected_info_row.saturating_sub(10);
     } else {
@@ -228,7 +228,7 @@ fn handle_alt_up(key: KeyEvent, state: &mut AppState, data: &mut AppData) {
     }
 }
 
-fn handle_normal_up(key: KeyEvent, state: &mut AppState, data: &mut AppData) {
+fn handle_normal_up(_key: KeyEvent, state: &mut AppState, data: &mut AppData) {
     if state.selected_tab == 2 && state.info_pane_selected && state.selected_info_row > 0 {
         state.selected_info_row -= 1;
     } else if state.selected_row > 0 {

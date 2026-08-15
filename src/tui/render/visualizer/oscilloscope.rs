@@ -11,7 +11,7 @@ use super::common::{downsample, normalize, split_channels, MAX_POINTS};
 
 const OSCILLOSCOPE_WINDOW_SAMPLES: usize = 1024;
 
-pub fn render_oscilloscope(frame: &mut Frame, area: Rect, samples: &[f32], mode: VisualizerMode) {
+pub fn render_oscilloscope(frame: &mut Frame, area: Rect, samples: &[f32], _mode: VisualizerMode) {
     let samples = oscilloscope_window(samples);
     let (left, right) = split_channels(samples);
     let left = downsample(&normalize(&left), MAX_POINTS);

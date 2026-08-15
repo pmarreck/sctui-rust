@@ -6,6 +6,26 @@ a soundcloud client for the terminal
 
 ![demo](./media/playing_demo.png)
 
+## Authentication
+
+On startup, `sctui` uses the first available credential source in this order:
+
+1. An unexpired `token.json` in the current directory.
+2. `SOUNDCLOUD_CLIENT_ID` and `SOUNDCLOUD_CLIENT_SECRET`, including values loaded from `.env`.
+3. The `oauth_token` cookie from a signed-in SoundCloud session in a local Firefox profile.
+
+Firefox fallback supports standard Firefox, Snap Firefox, and Flatpak Firefox profiles on Linux, plus the standard profile locations on macOS and Windows. It reads a private snapshot of `cookies.sqlite` and its WAL sidecars. Browser credentials are used only for the current process and are never written to `token.json`.
+
+## Build and test
+
+Run `nix build` for the pinned, sandboxed release build. The executable is installed at `result/bin/sctui`; this checkout's `bin` symlink can expose it as `bin/sctui`.
+
+Run the same build and test derivation used by Mechatron Prime with:
+
+```sh
+nix build .#checks.x86_64-linux.default
+```
+
 ## Features
 
 ### 🎧 High Quality Ad-Free playback

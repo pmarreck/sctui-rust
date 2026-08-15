@@ -3,7 +3,7 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::token::{Token, REFRESH_TIME};
+use super::token::Token;
 
 static REFRESH_BUFFER: u64 = 300;
 
@@ -41,9 +41,7 @@ pub fn start_auto_refresh(token: Arc<Mutex<Token>>, reauth_tx: std::sync::mpsc::
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
                     .as_secs();
-                let time_until_expiry =
-                    (token_guard.obtained_at + REFRESH_TIME).saturating_sub(now);
-                time_until_expiry <= REFRESH_BUFFER
+                token_guard.should_refresh_at(now.saturating_add(REFRESH_BUFFER))
             };
 
             if should_refresh {
@@ -68,7 +66,11 @@ pub fn start_auto_refresh(token: Arc<Mutex<Token>>, reauth_tx: std::sync::mpsc::
 
 pub fn try_refresh_token(token: &Arc<Mutex<Token>>) -> Result<()> {
     let token_guard = token.lock().unwrap();
-    if token_guard.is_expired() {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    if token_guard.should_refresh_at(now) {
         drop(token_guard);
         let mut token_guard = token.lock().unwrap();
         match refresh_token(&*token_guard) {

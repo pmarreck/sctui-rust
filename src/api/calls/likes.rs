@@ -24,7 +24,10 @@ impl API {
 
         let resp: serde_json::Value = Client::new()
             .get(&url)
-            .bearer_auth(&token_guard.access_token)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                crate::auth::authorization_header(&token_guard.access_token),
+            )
             .send()?
             .error_for_status()?
             .json()?;

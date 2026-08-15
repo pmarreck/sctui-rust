@@ -1,5 +1,4 @@
 use super::InputOutcome;
-use crate::api::Track;
 use crate::tui::logic::state::{AppData, AppState, PlaybackSource, FollowingTracksFocus};
 use crate::player::Player;
 use crate::tui::logic::utils::{build_queue, queued_from_current};
