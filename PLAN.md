@@ -11,6 +11,6 @@
   - Finding: the Go fork queries Firefox `cookies.sqlite` for SoundCloud's `oauth_token`, then sends it as `Authorization: OAuth …` without a refresh token.
   - Finding: Rust needs a non-refreshable browser-session credential mode and centralized `OAuth` header construction; its current unconditional refresh thread and repeated `bearer_auth` calls are incompatible.
   - Finding: two local Firefox cookie databases were inspected without selecting secret values; neither currently contains a SoundCloud cookie.
-- [ ] Fork `Illogicalll/sctui` into Peter's GitHub account and configure this checkout with distinct fork and upstream remotes.
+- [x] Fork `Illogicalll/sctui` into Peter's GitHub account and configure this checkout with distinct fork and upstream remotes. (2026-08-15 02:23 PM EDT)
   - Curiosity poke: detect an existing fork first, preserve fetch access to upstream, and do not disturb the passing local commit.
-  - Dependency: `pmarreck/sctui` is already the Go fork; `pmarreck/sctui-rust` is available for this fork if Peter approves the name.
+  - Result: `pmarreck/sctui-rust` is the fork, `origin` points to it, and `upstream` retains `Illogicalll/sctui`.
