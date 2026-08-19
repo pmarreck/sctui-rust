@@ -4,13 +4,14 @@ use rodio::Sink;
 use std::collections::VecDeque;
 use std::sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     mpsc::{self, Sender},
 };
 use std::thread;
 use std::time::{Duration, Instant};
 
 use super::commands::PlayerCommand;
+use super::PlaybackOutcome;
 use super::worker::player_loop;
 
 fn playback_restriction_message(track: &Track) -> Option<String> {
@@ -29,6 +30,9 @@ pub struct Player {
     sink: Arc<Mutex<Option<Sink>>>,
     wave_buffer: Arc<Mutex<VecDeque<f32>>>,
     last_error: Arc<Mutex<Option<String>>>,
+    outcomes: Arc<Mutex<VecDeque<PlaybackOutcome>>>,
+    next_attempt_id: AtomicU64,
+    requested_attempt_id: AtomicU64,
 }
 
 impl Player {
@@ -42,6 +46,7 @@ impl Player {
         let current_track = Arc::new(Mutex::new(None));
         let wave_buffer = Arc::new(Mutex::new(VecDeque::new()));
         let last_error = Arc::new(Mutex::new(None));
+        let outcomes = Arc::new(Mutex::new(VecDeque::new()));
 
         {
             let flag_clone = Arc::clone(&is_playing_flag);
@@ -53,6 +58,7 @@ impl Player {
             let seeking_clone = Arc::clone(&is_seeking_flag);
             let wave_buffer_clone = Arc::clone(&wave_buffer);
             let last_error_clone = Arc::clone(&last_error);
+            let outcomes_clone = Arc::clone(&outcomes);
 
             thread::spawn(move || {
                 player_loop(
@@ -66,6 +72,7 @@ impl Player {
                     track_clone,
                     wave_buffer_clone,
                     last_error_clone,
+                    outcomes_clone,
                 );
             });
         }
@@ -80,15 +87,27 @@ impl Player {
             sink,
             wave_buffer,
             last_error,
+            outcomes,
+            next_attempt_id: AtomicU64::new(0),
+            requested_attempt_id: AtomicU64::new(0),
         }
     }
 
     pub fn play(&self, track: Track) {
+        let attempt_id = self.begin_attempt();
         if let Some(message) = playback_restriction_message(&track) {
-            *self.last_error.lock().unwrap() = Some(message);
+            *self.last_error.lock().unwrap() = Some(message.clone());
+            self.outcomes
+                .lock()
+                .unwrap()
+                .push_back(PlaybackOutcome::Failed {
+                    attempt_id,
+                    track_urn: track.track_urn,
+                    message,
+                });
             return;
         }
-        let _ = self.tx.send(PlayerCommand::Play(track));
+        let _ = self.tx.send(PlayerCommand::Play(track, attempt_id));
     }
 
     pub fn pause(&self) {
@@ -129,14 +148,31 @@ impl Player {
     pub fn seek(&self, position_ms: u64) {
         if let Some(track) = self.current_track.lock().unwrap().clone() {
             let clamped = position_ms.min(track.duration_ms);
+            let attempt_id = self.begin_attempt();
             let _ = self
                 .tx
-                .send(PlayerCommand::PlayFromPosition(track, clamped));
+                .send(PlayerCommand::PlayFromPosition(track, clamped, attempt_id));
         }
     }
 
     pub fn playback_error(&self) -> Option<String> {
         self.last_error.lock().unwrap().clone()
+    }
+
+    /// Returns each worker result once so the UI can react without polling stale errors.
+    pub(crate) fn take_playback_outcome(&self) -> Option<PlaybackOutcome> {
+        self.outcomes.lock().unwrap().pop_front()
+    }
+
+    /// Identifies the newest request, even when the same SoundCloud track was selected twice.
+    pub(crate) fn requested_attempt_id(&self) -> u64 {
+        self.requested_attempt_id.load(Ordering::SeqCst)
+    }
+
+    fn begin_attempt(&self) -> u64 {
+        let attempt_id = self.next_attempt_id.fetch_add(1, Ordering::SeqCst) + 1;
+        self.requested_attempt_id.store(attempt_id, Ordering::SeqCst);
+        attempt_id
     }
 
     pub fn preload_next(&self, track: Track) {

@@ -6,7 +6,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-const SHORTCUTS: &str = "Esc Quit │ Tab Main tab │ ←/→ Section │ ↑/↓ Select │ Enter Play │ Space Pause │ ⇧←/→ Previous/next │ Alt←/→ Seek ±10s │ Alt↑/↓ Move ±10 │ ⇧↑/↓ Secondary │ ⇧J/K Tertiary │ ⇧U/D Volume │ ⇧S Shuffle │ ⇧R Repeat │ ⇧A Add queue │ ⇧N Play next │ ⇧L Like/follow │ ⇧V Visualizer │ ⇧F Find │ ⇧Q Queue │ ⇧H Help │ PgUp/PgDn Page │ Wheel Select │ ⇧Wheel ±5 │ Search Enter Submit";
+const SHORTCUTS: &str = "Ctrl-Q Quit │ Esc Quit menu │ Tab Main tab │ ←/→ Section │ ↑/↓ Select │ Enter Play │ Space Pause │ ⇧←/→ Previous/next │ Alt←/→ Seek ±10s │ Alt↑/↓ Move ±10 │ ⇧↑/↓ Secondary │ ⇧J/K Tertiary │ ⇧U/D Volume │ ⇧S Shuffle │ ⇧R Repeat │ ⇧A Add queue │ ⇧N Play next │ ⇧L Like/follow │ ⇧V Visualizer │ ⇧F Find │ ⇧Q Queue │ ⇧H Help │ PgUp/PgDn Page │ Wheel Select │ ⇧Wheel ±5 │ Search Enter Submit";
 const MARQUEE_GAP: &str = "     ";
 
 /// Produces a deterministic one-line window over the complete shortcut list.
@@ -66,15 +66,15 @@ mod tests {
     fn approved_status_views_are_stable_at_common_widths() {
         assert_eq!(
             shortcut_window(120, 0),
-            "Esc Quit │ Tab Main tab │ ←/→ Section │ ↑/↓ Select │ Enter Play │ Space Pause │ ⇧←/→ Previous/next │ Alt←/→ Seek ±10s │ "
+            "Ctrl-Q Quit │ Esc Quit menu │ Tab Main tab │ ←/→ Section │ ↑/↓ Select │ Enter Play │ Space Pause │ ⇧←/→ Previous/next │ "
         );
         assert_eq!(
             shortcut_window(80, 0),
-            "Esc Quit │ Tab Main tab │ ←/→ Section │ ↑/↓ Select │ Enter Play │ Space Pause │ "
+            "Ctrl-Q Quit │ Esc Quit menu │ Tab Main tab │ ←/→ Section │ ↑/↓ Select │ Enter Pl"
         );
         assert_eq!(
             shortcut_window(120, 120),
-            "Alt↑/↓ Move ±10 │ ⇧↑/↓ Secondary │ ⇧J/K Tertiary │ ⇧U/D Volume │ ⇧S Shuffle │ ⇧R Repeat │ ⇧A Add queue │ ⇧N Play next │ "
+            "Alt←/→ Seek ±10s │ Alt↑/↓ Move ±10 │ ⇧↑/↓ Secondary │ ⇧J/K Tertiary │ ⇧U/D Volume │ ⇧S Shuffle │ ⇧R Repeat │ ⇧A Add queu"
         );
     }
 

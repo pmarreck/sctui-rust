@@ -75,8 +75,18 @@
   - Result: edits wait for Enter, submission transfers focus to results, and the native terminal cursor tracks centered UTF-8 input without crossing the border.
 - [ ] Provision the signed `pmarreck/sctui-rust` Mechatron webhook and verify the next exact pushed commit.
   - Curiosity poke: run the all-owner dry run first and keep the HMAC secret out of arguments, logs, repository files, and chat.
-- [ ] Run the complete Cargo and Nix gates, update documentation and `dirtree`, then commit and push the passing unit.
+- [x] Automatically advance after a playback failure until a playable track starts or the queue is exhausted. (completed 2026-08-19 05:12 PM EDT)
+  - Curiosity poke: handle both pre-classified restrictions and asynchronous resolver/decoder failures without retry loops, skipping manual-queue entries, or repeatedly selecting the same track.
+  - Result: uniquely numbered playback outcomes consume the finite manual-then-collection queue; stale results from superseded requests are ignored, including repeated selection of the same SoundCloud URN.
+- [x] Make Ctrl-Q exit from every input context, including while editing Search. (completed 2026-08-19 05:12 PM EDT)
+  - Curiosity poke: preserve plain `q` as text inside Search while handling Ctrl-Q before text-entry dispatch.
+  - Result: Ctrl-Q is dispatched before quit confirmation and Search editing, while plain `q` retains its existing meaning; the status marquee and Help document both quit paths.
+- [x] Add the required top-level `./build` and `./test` entry points. (completed 2026-08-19 05:12 PM EDT)
+  - Curiosity poke: keep the scripts as thin wrappers over the canonical Nix outputs and let `./test` return an accumulated failure count without `set -e`.
+- [x] Run the complete Cargo and Nix gates and update documentation and `dirtree`. (completed 2026-08-19 05:12 PM EDT)
   - Curiosity poke: preserve the live-only playback test as an explicit extra check and report any remaining physical TUI uncertainty.
-  - Current state: 41 deterministic tests, both opt-in live Firefox checks, and `checks.x86_64-linux.default` pass. Physical visual approval remains for the appended shortcut hints and live cursor.
+  - Result: 45 deterministic tests pass, 2 live Firefox checks remain explicitly opt-in, and both `./test` and `./build` pass in Nix.
+- [ ] Commit the passing unit, then push and verify its exact commit after the signed webhook is provisioned.
+  - Dependency: pushing remains ordered after the signed webhook so Mechatron Prime can observe and verify the exact commit.
 
 Future testing note: Peter and Einstein are preparing a libghostty-based terminal emulator path that should provide better objective TUI interaction tests than tmux. It is intentionally outside this work unit until its interface is ready.

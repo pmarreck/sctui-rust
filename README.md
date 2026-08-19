@@ -18,11 +18,13 @@ Firefox fallback supports standard Firefox, Snap Firefox, and Flatpak Firefox pr
 
 SoundCloud rejects browser-session tokens on several legacy `api.soundcloud.com/me/*` routes. For Firefox sessions, `sctui` resolves the signed-in user through api-v2 and uses its user-scoped likes, library, and following collections.
 
-Playback likewise uses the API-v2 transcoding metadata returned with each track. Playback failures are shown in red in the status line instead of being discarded by the audio worker. When SoundCloud marks a track as Go+ high-tier content, `sctui` reports that its encrypted playback is unsupported instead of displaying the 404 from SoundCloud's obsolete fallback resolver.
+Playback likewise uses the API-v2 transcoding metadata returned with each track. Playback failures are shown in red in the status line, then `sctui` advances through the manual queue and current collection until a track starts or no candidates remain. When SoundCloud marks a track as Go+ high-tier content, `sctui` reports that its encrypted playback is unsupported instead of displaying the 404 from SoundCloud's obsolete fallback resolver.
 
 ## Controls
 
 The italic status line between the active list and player shows every keyboard shortcut in a scrolling marquee. Press `Shift+H` for the full help popup.
+
+Press `Ctrl-Q` to exit immediately from any view or input field. `Esc` opens the quit confirmation.
 
 Mouse controls are also available:
 
@@ -36,9 +38,9 @@ Mouse controls are also available:
 
 ## Build and test
 
-Run `nix build` for the pinned, sandboxed release build. The executable is installed at `result/bin/sctui`; this checkout's `bin` symlink can expose it as `bin/sctui`.
+Run `./build` for the pinned, sandboxed release build. The executable is installed at `result/bin/sctui`; this checkout's `bin` symlink exposes it as `bin/sctui`.
 
-Run the same build and test derivation used by Mechatron Prime with:
+Run the same build and test derivation used by Mechatron Prime with `./test`. Its underlying command is:
 
 ```sh
 nix build .#checks.x86_64-linux.default

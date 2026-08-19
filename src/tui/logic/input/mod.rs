@@ -1,4 +1,4 @@
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 
 use crate::player::Player;
@@ -22,6 +22,11 @@ pub enum InputOutcome {
     Quit,
 }
 
+fn is_immediate_quit(key: KeyEvent) -> bool {
+    matches!(key.code, KeyCode::Char('q' | 'Q'))
+        && key.modifiers.contains(KeyModifiers::CONTROL)
+}
+
 pub fn handle_key_event(
     key: KeyEvent,
     area: Rect,
@@ -29,6 +34,10 @@ pub fn handle_key_event(
     data: &mut AppData,
     player: &Player,
 ) -> InputOutcome {
+    if is_immediate_quit(key) {
+        return InputOutcome::Quit;
+    }
+
     if state.quit_confirm_visible {
         return quit::handle_quit_confirm(key, state);
     }
@@ -87,5 +96,28 @@ pub fn handle_key_event(
             }
         }
         _ => InputOutcome::Continue,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    use super::is_immediate_quit;
+
+    #[test]
+    fn control_q_exits_before_any_focused_input_handles_the_character() {
+        assert!(is_immediate_quit(KeyEvent::new(
+            KeyCode::Char('q'),
+            KeyModifiers::CONTROL,
+        )));
+        assert!(is_immediate_quit(KeyEvent::new(
+            KeyCode::Char('Q'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        )));
+        assert!(!is_immediate_quit(KeyEvent::new(
+            KeyCode::Char('q'),
+            KeyModifiers::NONE,
+        )));
     }
 }

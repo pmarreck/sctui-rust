@@ -11,12 +11,34 @@ use std::time::{Duration, Instant};
 
 use super::commands::PlayerCommand;
 use super::stream::{PlaybackEngine, open_output_stream};
+use super::PlaybackOutcome;
 
 pub(crate) fn record_playback_result(
     last_error: &Arc<Mutex<Option<String>>>,
+    outcomes: &Arc<Mutex<VecDeque<PlaybackOutcome>>>,
+    attempt_id: u64,
+    track_urn: &str,
     result: anyhow::Result<()>,
 ) {
-    *last_error.lock().unwrap() = result.err().map(|error| format!("{error:#}"));
+    let outcome = match result {
+        Ok(()) => {
+            *last_error.lock().unwrap() = None;
+            PlaybackOutcome::Started {
+                attempt_id,
+                track_urn: track_urn.to_string(),
+            }
+        }
+        Err(error) => {
+            let message = format!("{error:#}");
+            *last_error.lock().unwrap() = Some(message.clone());
+            PlaybackOutcome::Failed {
+                attempt_id,
+                track_urn: track_urn.to_string(),
+                message,
+            }
+        }
+    };
+    outcomes.lock().unwrap().push_back(outcome);
 }
 
 pub(crate) fn player_loop(
@@ -30,13 +52,16 @@ pub(crate) fn player_loop(
     current_track: Arc<Mutex<Option<Track>>>,
     wave_buffer: Arc<Mutex<VecDeque<f32>>>,
     last_error: Arc<Mutex<Option<String>>>,
+    outcomes: Arc<Mutex<VecDeque<PlaybackOutcome>>>,
 ) {
     let stream = open_output_stream();
     let mut engine = PlaybackEngine::new(Arc::clone(&stream)).unwrap();
+    let mut active_attempt_id = 0;
 
     for msg in rx {
         match msg {
-            PlayerCommand::Play(track) => {
+            PlayerCommand::Play(track, attempt_id) => {
+                active_attempt_id = attempt_id;
                 let result = engine.play_from_position(
                     &track,
                     0,
@@ -48,13 +73,20 @@ pub(crate) fn player_loop(
                     &current_track,
                     &wave_buffer,
                 );
-                record_playback_result(&last_error, result);
+                record_playback_result(
+                    &last_error,
+                    &outcomes,
+                    attempt_id,
+                    &track.track_urn,
+                    result,
+                );
             }
 
-            PlayerCommand::PlayFromPosition(track, position_ms) => {
+            PlayerCommand::PlayFromPosition(track, position_ms, attempt_id) => {
                 if is_seeking_flag.swap(true, Ordering::SeqCst) {
                     continue;
                 }
+                active_attempt_id = attempt_id;
                 let result = engine.play_from_position(
                     &track,
                     position_ms,
@@ -66,7 +98,13 @@ pub(crate) fn player_loop(
                     &current_track,
                     &wave_buffer,
                 );
-                record_playback_result(&last_error, result);
+                record_playback_result(
+                    &last_error,
+                    &outcomes,
+                    attempt_id,
+                    &track.track_urn,
+                    result,
+                );
                 is_seeking_flag.store(false, Ordering::SeqCst);
             }
 
@@ -157,7 +195,13 @@ pub(crate) fn player_loop(
                             &current_track,
                             &wave_buffer,
                         );
-                        record_playback_result(&last_error, result);
+                        record_playback_result(
+                            &last_error,
+                            &outcomes,
+                            active_attempt_id,
+                            &track.track_urn,
+                            result,
+                        );
                     }
                 }
                 is_seeking_flag.store(false, Ordering::SeqCst);
@@ -203,7 +247,13 @@ pub(crate) fn player_loop(
                         &current_track,
                         &wave_buffer,
                     );
-                    record_playback_result(&last_error, result);
+                    record_playback_result(
+                        &last_error,
+                        &outcomes,
+                        active_attempt_id,
+                        &track.track_urn,
+                        result,
+                    );
                 }
                 is_seeking_flag.store(false, Ordering::SeqCst);
             }
@@ -213,21 +263,50 @@ pub(crate) fn player_loop(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::{collections::VecDeque, sync::{Arc, Mutex}};
 
+    use crate::player::PlaybackOutcome;
     use super::record_playback_result;
 
     #[test]
-    fn playback_results_are_visible_and_a_success_clears_the_prior_error() {
+    fn playback_results_report_the_attempted_track_and_clear_prior_errors() {
         let error = Arc::new(Mutex::new(None));
+        let outcomes = Arc::new(Mutex::new(VecDeque::new()));
 
-        record_playback_result(&error, Err(anyhow::anyhow!("resolver returned 403")));
+        record_playback_result(
+            &error,
+            &outcomes,
+            17,
+            "soundcloud:tracks:1",
+            Err(anyhow::anyhow!("resolver returned 403")),
+        );
         assert_eq!(
             error.lock().unwrap().as_deref(),
             Some("resolver returned 403")
         );
+        assert_eq!(
+            outcomes.lock().unwrap().pop_front(),
+            Some(PlaybackOutcome::Failed {
+                attempt_id: 17,
+                track_urn: "soundcloud:tracks:1".into(),
+                message: "resolver returned 403".into(),
+            })
+        );
 
-        record_playback_result(&error, Ok(()));
+        record_playback_result(
+            &error,
+            &outcomes,
+            18,
+            "soundcloud:tracks:2",
+            Ok(()),
+        );
         assert_eq!(*error.lock().unwrap(), None);
+        assert_eq!(
+            outcomes.lock().unwrap().pop_front(),
+            Some(PlaybackOutcome::Started {
+                attempt_id: 18,
+                track_urn: "soundcloud:tracks:2".into(),
+            })
+        );
     }
 }

@@ -13,7 +13,8 @@ pub fn render_help(frame: &mut Frame) {
     frame.render_widget(Clear, popup_area);
 
     let mut rows: Vec<Row> = vec![
-        Row::new(vec!["Esc", "Quit"]),
+        Row::new(vec!["Ctrl-Q", "Quit immediately"]),
+        Row::new(vec!["Esc", "Open quit confirmation"]),
         Row::new(vec!["Tab", "Cycle main tabs / Visualizer view (in visualizer mode)"]),
         Row::new(vec!["Left/Right", "Change sub-tab"]),
         Row::new(vec!["Up/Down · PgUp/PgDn", "Move selector by row / page"]),

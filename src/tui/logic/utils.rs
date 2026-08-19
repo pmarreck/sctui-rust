@@ -257,6 +257,32 @@ pub fn build_queue(
     }
 }
 
+pub(crate) enum RecoveryCandidate {
+    Manual(QueuedTrack),
+    Automatic { index: usize, track: Track },
+}
+
+/// Consumes a finite recovery queue, preserving manual priority and never rebuilding failed work.
+pub(crate) fn take_next_recovery_candidate(
+    manual_queue: &mut VecDeque<QueuedTrack>,
+    auto_queue: &mut VecDeque<usize>,
+    active_tracks: &[Track],
+) -> Option<RecoveryCandidate> {
+    if let Some(queued) = manual_queue.pop_front() {
+        return Some(RecoveryCandidate::Manual(queued));
+    }
+
+    while let Some(index) = auto_queue.pop_front() {
+        if let Some(track) = active_tracks.get(index) {
+            return Some(RecoveryCandidate::Automatic {
+                index,
+                track: track.clone(),
+            });
+        }
+    }
+    None
+}
+
 pub fn play_queued_track(
     queued: QueuedTrack,
     state: &mut AppState,
@@ -264,10 +290,6 @@ pub fn play_queued_track(
     player: &Player,
     preserve_context: bool,
 ) {
-    if !queued.track.is_playable() {
-        return;
-    }
-
     player.play(queued.track.clone());
     state.override_playing = Some(queued.clone());
     if preserve_context {
@@ -418,5 +440,72 @@ pub fn queued_from_current(state: &AppState, data: &AppData) -> Option<QueuedTra
                 user_added: false,
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::VecDeque;
+
+    use crate::api::Track;
+    use crate::tui::logic::state::{PlaybackSource, QueuedTrack};
+
+    use super::{RecoveryCandidate, take_next_recovery_candidate};
+
+    fn track(id: u64) -> Track {
+        Track {
+            title: format!("Track {id}"),
+            artists: "Fixture".into(),
+            duration: "03:00".into(),
+            duration_ms: 180_000,
+            playback_count: "1".into(),
+            artwork_url: String::new(),
+            stream_url: format!("https://resolver/{id}"),
+            access: "playable".into(),
+            playback_restriction: None,
+            track_urn: format!("soundcloud:tracks:{id}"),
+        }
+    }
+
+    fn queued(id: u64) -> QueuedTrack {
+        QueuedTrack {
+            source: PlaybackSource::Likes,
+            index: id as usize,
+            track: track(id),
+            tracks_snapshot: None,
+            playlist_uri: None,
+            album_uri: None,
+            following_user_urn: None,
+            user_added: true,
+        }
+    }
+
+    #[test]
+    fn playback_recovery_consumes_manual_then_automatic_candidates_once() {
+        let tracks = vec![track(0), track(1), track(2)];
+        let mut manual = VecDeque::from([queued(9)]);
+        let mut automatic = VecDeque::from([2]);
+
+        assert!(matches!(
+            take_next_recovery_candidate(&mut manual, &mut automatic, &tracks),
+            Some(RecoveryCandidate::Manual(candidate))
+                if candidate.track.track_urn == "soundcloud:tracks:9"
+        ));
+        assert!(matches!(
+            take_next_recovery_candidate(&mut manual, &mut automatic, &tracks),
+            Some(RecoveryCandidate::Automatic { index: 2, track })
+                if track.track_urn == "soundcloud:tracks:2"
+        ));
+        assert!(take_next_recovery_candidate(&mut manual, &mut automatic, &tracks).is_none());
+    }
+
+    #[test]
+    fn playback_recovery_discards_stale_automatic_indices() {
+        let tracks = vec![track(0)];
+        let mut manual = VecDeque::new();
+        let mut automatic = VecDeque::from([12]);
+
+        assert!(take_next_recovery_candidate(&mut manual, &mut automatic, &tracks).is_none());
+        assert!(automatic.is_empty());
     }
 }

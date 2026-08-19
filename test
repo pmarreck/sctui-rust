@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -u
+
+system="$(nix eval --raw --impure --expr builtins.currentSystem)"
+failures=0
+
+nix build ".#checks.${system}.default" || failures=$((failures + 1))
+
+exit "$failures"

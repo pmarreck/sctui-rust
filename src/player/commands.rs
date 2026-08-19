@@ -1,8 +1,8 @@
 use crate::api::Track;
 
 pub enum PlayerCommand {
-    Play(Track),
-    PlayFromPosition(Track, u64),
+    Play(Track, u64),
+    PlayFromPosition(Track, u64, u64),
     PreloadNext(Track),
     Pause,
     Resume,

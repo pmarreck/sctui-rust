@@ -10,7 +10,7 @@ use crate::api::{
     fetch_search_tracks, follow_user, like_playlist, like_track, unfollow_user, unlike_playlist,
     unlike_track,
 };
-use crate::player::Player;
+use crate::player::{PlaybackOutcome, Player};
 use ratatui::{
     DefaultTerminal,
     crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event},
@@ -36,7 +36,10 @@ use self::input::{ClickTracker, InputOutcome, handle_key_event, handle_mouse_eve
 use self::state::{
     AppData, AppState, EngagementAction, EngagementDone, FollowingTracksFocus, PlaybackSource,
 };
-use self::utils::{build_queue, play_queued_track, queued_from_current};
+use self::utils::{
+    RecoveryCandidate, build_queue, play_queued_track, queued_from_current,
+    take_next_recovery_candidate,
+};
 use super::render::render;
 
 const TAB_TITLES: [&str; 3] = ["Library", "Search", "Feed"];
@@ -45,6 +48,79 @@ const SEARCHFILTERS: [&str; 4] = ["Tracks", "Albums", "Playlists", "People"];
 
 enum AppEvent {
     Redraw(Result<ResizeResponse, Errors>),
+}
+
+/// Advances through the already-built queues after a failed start without rebuilding a cycle.
+fn recover_from_playback_failure(state: &mut AppState, data: &mut AppData, player: &Player) {
+    let active_tracks = match state.playback_source {
+        PlaybackSource::Likes => &data.likes,
+        PlaybackSource::Playlist
+        | PlaybackSource::Album
+        | PlaybackSource::FollowingPublished
+        | PlaybackSource::FollowingLikes => &data.playback_tracks,
+    };
+    let candidate = take_next_recovery_candidate(
+        &mut state.manual_queue,
+        &mut state.auto_queue,
+        active_tracks,
+    );
+
+    match candidate {
+        Some(RecoveryCandidate::Manual(queued)) => {
+            play_queued_track(queued, state, data, player, true);
+        }
+        Some(RecoveryCandidate::Automatic { index, track }) => {
+            player.play(track);
+            state.override_playing = None;
+            state.current_playing_index = Some(index);
+        }
+        None => player.pause(),
+    }
+}
+
+fn is_current_playback_failure(outcome: &PlaybackOutcome, requested_attempt_id: u64) -> bool {
+    matches!(
+        outcome,
+        PlaybackOutcome::Failed { attempt_id, .. } if *attempt_id == requested_attempt_id
+    )
+}
+
+/// Consumes playback results once and ignores results superseded by a newer user request.
+fn handle_playback_outcomes(state: &mut AppState, data: &mut AppData, player: &Player) {
+    while let Some(outcome) = player.take_playback_outcome() {
+        if is_current_playback_failure(&outcome, player.requested_attempt_id()) {
+            recover_from_playback_failure(state, data, player);
+        }
+    }
+}
+
+#[cfg(test)]
+mod playback_outcome_tests {
+    use crate::player::PlaybackOutcome;
+
+    use super::is_current_playback_failure;
+
+    #[test]
+    fn only_the_newest_failed_attempt_triggers_queue_recovery() {
+        let stale_failure = PlaybackOutcome::Failed {
+            attempt_id: 41,
+            track_urn: "soundcloud:tracks:7".into(),
+            message: "stale failure".into(),
+        };
+        let current_failure = PlaybackOutcome::Failed {
+            attempt_id: 42,
+            track_urn: "soundcloud:tracks:7".into(),
+            message: "current failure".into(),
+        };
+        let current_success = PlaybackOutcome::Started {
+            attempt_id: 42,
+            track_urn: "soundcloud:tracks:7".into(),
+        };
+
+        assert!(!is_current_playback_failure(&stale_failure, 42));
+        assert!(is_current_playback_failure(&current_failure, 42));
+        assert!(!is_current_playback_failure(&current_success, 42));
+    }
 }
 
 pub fn run(api: &mut Arc<Mutex<API>>, player: Player) -> anyhow::Result<()> {
@@ -1166,6 +1242,8 @@ fn start(
                 _ => {}
             }
         }
+
+        handle_playback_outcomes(&mut state, &mut data, &player);
 
         if last_tick.elapsed() >= tick_rate {
             state.progress = player.elapsed();
