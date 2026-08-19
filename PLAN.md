@@ -86,7 +86,9 @@
 - [x] Run the complete Cargo and Nix gates and update documentation and `dirtree`. (completed 2026-08-19 05:12 PM EDT)
   - Curiosity poke: preserve the live-only playback test as an explicit extra check and report any remaining physical TUI uncertainty.
   - Result: 45 deterministic tests pass, 2 live Firefox checks remain explicitly opt-in, and both `./test` and `./build` pass in Nix.
-- [ ] Commit the passing unit, then push and verify its exact commit after the signed webhook is provisioned.
-  - Dependency: pushing remains ordered after the signed webhook so Mechatron Prime can observe and verify the exact commit.
+- [x] Commit the passing playback-recovery and Ctrl-Q unit. (completed 2026-08-19 05:13 PM EDT)
+  - Result: implementation commit `385b455` is locally recorded on `main` with the Nix gates passing.
+- [ ] Push and verify the exact commits after the signed webhook is provisioned.
+  - Dependency: pushing remains ordered after the signed webhook so Mechatron Prime can observe and verify the exact commits.
 
 Future testing note: Peter and Einstein are preparing a libghostty-based terminal emulator path that should provide better objective TUI interaction tests than tmux. It is intentionally outside this work unit until its interface is ready.
