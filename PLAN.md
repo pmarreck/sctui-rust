@@ -98,6 +98,7 @@
   - Result: each current playback failure stores a six-second notice using injected elapsed time, so successful automatic recovery cannot immediately replace the red error with shortcut help.
 - [x] Run deterministic, live Firefox, sandboxed test, and release-build gates for nested library interaction and retained errors. (completed 2026-08-19 06:11 PM EDT)
   - Result: 50 deterministic tests and all 4 opt-in live Firefox checks pass; `./test` and `./build` pass, and `bin/sctui` resolves to the new Nix store executable.
-- [ ] Commit the passing nested-library interaction and retained-error unit.
+- [x] Commit the passing nested-library interaction and retained-error unit. (completed 2026-08-19 06:12 PM EDT)
+  - Result: implementation commit `ca5f1dd` is locally recorded on `main` with all deterministic, live Firefox, Nix test, and release-build gates passing.
 
 Future testing note: Peter and Einstein are preparing a libghostty-based terminal emulator path that should provide better objective TUI interaction tests than tmux. It is intentionally outside this work unit until its interface is ready.
