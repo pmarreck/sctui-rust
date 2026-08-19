@@ -16,9 +16,9 @@ On startup, `sctui` uses the first available credential source in this order:
 
 Firefox fallback supports standard Firefox, Snap Firefox, and Flatpak Firefox profiles on Linux, plus the standard profile locations on macOS and Windows. It reads a private snapshot of `cookies.sqlite` and its WAL sidecars. Browser credentials are used only for the current process and are never written to `token.json`.
 
-SoundCloud rejects browser-session tokens on several legacy `api.soundcloud.com/me/*` routes. For Firefox sessions, `sctui` resolves the signed-in user through api-v2 and uses its user-scoped likes, library, and following collections.
+SoundCloud rejects browser-session tokens on several legacy `api.soundcloud.com` routes. For Firefox sessions, `sctui` resolves the signed-in user through api-v2 and uses its user-scoped likes, library, following, playlist, album, and followed-person track collections.
 
-Playback likewise uses the API-v2 transcoding metadata returned with each track. Playback failures are shown in red in the status line, then `sctui` advances through the manual queue and current collection until a track starts or no candidates remain. When SoundCloud marks a track as Go+ high-tier content, `sctui` reports that its encrypted playback is unsupported instead of displaying the 404 from SoundCloud's obsolete fallback resolver.
+Playback likewise uses the API-v2 transcoding metadata returned with each track. Playback failures are shown in red in the status line for at least six seconds while `sctui` advances through the manual queue and current collection until a track starts or no candidates remain. When SoundCloud marks a track as Go+ high-tier content, `sctui` reports that its encrypted playback is unsupported instead of displaying the 404 from SoundCloud's obsolete fallback resolver.
 
 ## Controls
 
@@ -33,6 +33,8 @@ Mouse controls are also available:
 - Click a track once to select it and twice within 400 ms to play it.
 - Scroll the mouse wheel over the content to move track selection by one; hold Shift to move by five.
 - Click the playback progress bar to restart the current track at that position.
+
+Track clicks, wheel selection, and Enter playback use the same active track-pane target across Likes, Playlists, Albums, Following, and Search.
 
 `Page Up` and `Page Down` move track selection by one visible page. On the Search tab, typing focuses the visible input cursor, Enter submits the query, and navigation moves focus to the results so Enter can play the selected track.
 

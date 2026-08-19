@@ -210,22 +210,35 @@ pub(crate) fn active_track_target(state: &AppState) -> Option<TrackTarget> {
     }
 }
 
+fn track_regions(area: Rect, state: &AppState) -> Vec<(TrackTarget, Rect)> {
+    let root = root_regions(area);
+    match state.selected_tab {
+        0 => library_track_regions(
+            root.content,
+            state.selected_subtab,
+            state.search_popup_visible,
+        ),
+        1 => search_track_regions(root.content, state.selected_searchfilter),
+        _ => Vec::new(),
+    }
+}
+
+fn track_region_at(area: Rect, state: &AppState, column: u16) -> Option<(TrackTarget, Rect)> {
+    track_regions(area, state)
+        .into_iter()
+        .find(|(_, region)| column >= region.x && column < region.right())
+}
+
+fn track_target_at(area: Rect, state: &AppState, column: u16) -> Option<TrackTarget> {
+    track_region_at(area, state, column).map(|(target, _)| target)
+}
+
 pub(crate) fn active_track_page_rows(area: Rect, state: &AppState) -> usize {
     let target = match active_track_target(state) {
         Some(target) => target,
         None => return 0,
     };
-    let root = root_regions(area);
-    let regions = if state.selected_tab == 0 {
-        library_track_regions(
-            root.content,
-            state.selected_subtab,
-            state.search_popup_visible,
-        )
-    } else {
-        search_track_regions(root.content, state.selected_searchfilter)
-    };
-    regions
+    track_regions(area, state)
         .into_iter()
         .find_map(|(candidate, region)| (candidate == target).then_some(visible_table_rows(region)))
         .unwrap_or(0)
@@ -330,7 +343,7 @@ pub(crate) fn handle_mouse_event(
     let root = root_regions(area);
     if let Some(delta) = scroll_step(event.kind, event.modifiers) {
         if event.row >= root.content.y && event.row < root.content.bottom() {
-            if let Some(target) = active_track_target(state) {
+            if let Some(target) = track_target_at(area, state, event.column) {
                 move_track_selection(target, delta, state, data);
             }
         }
@@ -404,28 +417,15 @@ pub(crate) fn handle_mouse_event(
         }
     }
 
-    let track_regions = match state.selected_tab {
-        0 => library_track_regions(
-            root.content,
-            state.selected_subtab,
-            state.search_popup_visible,
-        ),
-        1 => search_track_regions(root.content, state.selected_searchfilter),
-        _ => Vec::new(),
-    };
-    for (target, track_area) in track_regions {
-        if event.column < track_area.x || event.column >= track_area.right() {
-            continue;
-        }
+    if let Some((target, track_area)) = track_region_at(area, state, event.column) {
         let (offset, len) = track_offset_and_len(target, state, data);
         let Some(row) = table_row_at(track_area, event.row, offset, len) else {
-            continue;
+            return;
         };
         select_track(target, row, state, data);
         if clicks.register(target, row, now) == ClickKind::Double {
             playback::handle_enter(state, data, player);
         }
-        return;
     }
 }
 
@@ -440,7 +440,8 @@ mod tests {
     use crate::tui::logic::state::AppState;
 
     use super::{
-        ClickKind, ClickTracker, active_track_page_rows, move_index, scroll_step,
+        ClickKind, ClickTracker, active_track_page_rows, active_track_target, move_index,
+        scroll_step, track_target_at,
     };
 
     #[test]
@@ -522,5 +523,48 @@ mod tests {
         state.selected_searchfilter = 0;
         assert_eq!(active_track_page_rows(area, &state), 20);
         assert_eq!(active_track_page_rows(Rect::new(0, 0, 120, 10), &state), 0);
+    }
+
+    #[test]
+    fn pointer_target_uses_the_same_rendered_track_regions_for_every_library_view() {
+        let area = Rect::new(0, 0, 120, 40);
+        let mut state = AppState::new();
+
+        assert_eq!(track_target_at(area, &state, 10), Some(TrackTarget::Likes));
+
+        state.selected_subtab = 1;
+        assert_eq!(track_target_at(area, &state, 10), None);
+        assert_eq!(track_target_at(area, &state, 50), Some(TrackTarget::Playlist));
+
+        state.selected_subtab = 2;
+        assert_eq!(track_target_at(area, &state, 50), None);
+        assert_eq!(track_target_at(area, &state, 90), Some(TrackTarget::Album));
+
+        state.selected_subtab = 3;
+        assert_eq!(track_target_at(area, &state, 10), None);
+        assert_eq!(
+            track_target_at(area, &state, 30),
+            Some(TrackTarget::FollowingPublished)
+        );
+        assert_eq!(
+            track_target_at(area, &state, 100),
+            Some(TrackTarget::FollowingLikes)
+        );
+    }
+
+    #[test]
+    fn enter_target_and_pointer_focus_cover_both_following_track_panes() {
+        let mut state = AppState::new();
+        state.selected_subtab = 3;
+
+        assert_eq!(
+            active_track_target(&state),
+            Some(TrackTarget::FollowingPublished)
+        );
+        state.following_tracks_focus = crate::tui::logic::state::FollowingTracksFocus::Likes;
+        assert_eq!(
+            active_track_target(&state),
+            Some(TrackTarget::FollowingLikes)
+        );
     }
 }

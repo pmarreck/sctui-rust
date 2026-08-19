@@ -1,9 +1,8 @@
-use reqwest;
+use crate::auth::Token;
 
-use crate::auth::{Token, try_refresh_token};
-
-use super::super::utils::{format_duration, parse_str, parse_track, parse_u64};
+use super::super::utils::{format_duration, parse_str, parse_u64, playlist_tracks_uri};
 use crate::api::{API, Album, Track};
+use crate::api::calls::playlists::fetch_playlist_tracks;
 use std::sync::{Arc, Mutex};
 
 impl API {
@@ -31,7 +30,7 @@ impl API {
                 release_year: parse_u64(album, "release_year").to_string(),
                 track_count: parse_u64(album, "track_count").to_string(),
                 duration: format_duration(parse_u64(album, "duration")),
-                tracks_uri: parse_str(album, "tracks_uri"),
+                tracks_uri: playlist_tracks_uri(album),
             });
         }
 
@@ -44,48 +43,5 @@ pub async fn fetch_album_tracks(
     token: Arc<Mutex<Token>>,
     tracks_uri: String,
 ) -> anyhow::Result<Vec<Track>> {
-    let _ = try_refresh_token(&token);
-
-    let access_token = { token.lock().unwrap().access_token.clone() };
-
-    let mut url = if tracks_uri.starts_with("http") {
-        tracks_uri
-    } else {
-        format!("https://api.soundcloud.com{}", tracks_uri)
-    };
-    if url.contains('?') {
-        if !url.contains("linked_partitioning") {
-            url.push_str("&linked_partitioning=true");
-        }
-        if !url.contains("limit=") {
-            url.push_str("&limit=200");
-        }
-        if !url.contains("access=") {
-            url.push_str("&access=playable,preview,blocked");
-        }
-    } else {
-        url.push_str("?linked_partitioning=true&limit=200&access=playable,preview,blocked");
-    }
-
-    let resp: serde_json::Value = reqwest::Client::new()
-        .get(&url)
-        .header(
-            reqwest::header::AUTHORIZATION,
-            crate::auth::authorization_header(access_token),
-        )
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
-
-    let items = if let Some(collection) = resp.get("collection").and_then(|v| v.as_array()) {
-        collection.clone()
-    } else if let Some(array) = resp.as_array() {
-        array.clone()
-    } else {
-        Vec::new()
-    };
-
-    Ok(items.iter().map(parse_track).collect())
+    fetch_playlist_tracks(token, tracks_uri).await
 }

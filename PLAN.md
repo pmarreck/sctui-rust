@@ -90,5 +90,14 @@
   - Result: implementation commit `385b455` is locally recorded on `main` with the Nix gates passing.
 - [ ] Push and verify the exact commits after the signed webhook is provisioned.
   - Dependency: pushing remains ordered after the signed webhook so Mechatron Prime can observe and verify the exact commits.
+- [x] Reproduce and fix mouse wheel, track clicking, and Enter playback across Playlists, Albums, and Following through one shared event-target path. (completed 2026-08-19 06:11 PM EDT)
+  - Curiosity poke: distinguish left-pane collection selection from right-pane track selection, preserve Following's Published/Likes focus, and test empty/loading panes without duplicating Likes-only dispatch.
+  - Result: legacy nested-track calls now use working api-v2 playlist and numeric-user resources; rendered track regions supply one target classifier for pointer selection and Enter playback across every pane.
+- [x] Keep a skipped-track playback error visible for a readable bounded interval after the replacement track starts. (completed 2026-08-19 06:11 PM EDT)
+  - Curiosity poke: inject display time, refresh the deadline for consecutive failures, and avoid letting a successful retry immediately replace the error with shortcut help.
+  - Result: each current playback failure stores a six-second notice using injected elapsed time, so successful automatic recovery cannot immediately replace the red error with shortcut help.
+- [x] Run deterministic, live Firefox, sandboxed test, and release-build gates for nested library interaction and retained errors. (completed 2026-08-19 06:11 PM EDT)
+  - Result: 50 deterministic tests and all 4 opt-in live Firefox checks pass; `./test` and `./build` pass, and `bin/sctui` resolves to the new Nix store executable.
+- [ ] Commit the passing nested-library interaction and retained-error unit.
 
 Future testing note: Peter and Einstein are preparing a libghostty-based terminal emulator path that should provide better objective TUI interaction tests than tmux. It is intentionally outside this work unit until its interface is ready.

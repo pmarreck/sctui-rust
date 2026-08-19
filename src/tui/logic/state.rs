@@ -2,6 +2,27 @@ use crate::api::{API, Album, Artist, Playlist, Track};
 use ratatui::widgets::TableState;
 use std::collections::{HashSet, VecDeque};
 use std::sync::mpsc::Receiver;
+use std::time::Duration;
+
+const PLAYBACK_ERROR_DISPLAY_TIME: Duration = Duration::from_secs(6);
+
+pub(crate) struct PlaybackErrorNotice {
+    message: String,
+    expires_at: Duration,
+}
+
+impl PlaybackErrorNotice {
+    pub(crate) fn new(message: impl Into<String>, now: Duration) -> Self {
+        Self {
+            message: message.into(),
+            expires_at: now.saturating_add(PLAYBACK_ERROR_DISPLAY_TIME),
+        }
+    }
+
+    pub(crate) fn message_at(&self, now: Duration) -> Option<&str> {
+        (now < self.expires_at).then_some(self.message.as_str())
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackSource {
@@ -138,6 +159,7 @@ pub struct AppState {
     pub visualizer_view: VisualizerMode,
     pub end_handled_track_urn: Option<String>,
     pub preload_triggered_for_track_urn: Option<String>,
+    pub playback_error_notice: Option<PlaybackErrorNotice>,
 }
 
 impl AppState {
@@ -203,7 +225,33 @@ impl AppState {
             visualizer_view: VisualizerMode::Oscilloscope,
             end_handled_track_urn: None,
             preload_triggered_for_track_urn: None,
+            playback_error_notice: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod playback_error_notice_tests {
+    use std::time::Duration;
+
+    use super::PlaybackErrorNotice;
+
+    #[test]
+    fn skipped_track_error_remains_readable_after_recovery_then_expires() {
+        let notice = PlaybackErrorNotice::new(
+            "SoundCloud Go+ track is unavailable",
+            Duration::from_secs(10),
+        );
+
+        assert_eq!(
+            notice.message_at(Duration::from_secs(10)),
+            Some("SoundCloud Go+ track is unavailable")
+        );
+        assert_eq!(
+            notice.message_at(Duration::from_secs(15)),
+            Some("SoundCloud Go+ track is unavailable")
+        );
+        assert_eq!(notice.message_at(Duration::from_secs(16)), None);
     }
 }
 

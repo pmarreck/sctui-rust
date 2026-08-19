@@ -20,6 +20,8 @@ pub use calls::search::{
 };
 pub use models::{Album, Artist, PlaybackRestriction, Playlist, Track};
 
+pub(crate) const API_V2_BASE_URL: &str = "https://api-v2.soundcloud.com";
+
 pub struct API {
     token: Arc<Mutex<Token>>,
     api_v2_base_url: String,
@@ -35,7 +37,7 @@ pub struct API {
 
 impl API {
     pub fn init(token: Arc<Mutex<Token>>) -> Self {
-        Self::init_with_base_url(token, "https://api-v2.soundcloud.com".into())
+        Self::init_with_base_url(token, API_V2_BASE_URL.into())
     }
 
     fn init_with_base_url(token: Arc<Mutex<Token>>, api_v2_base_url: String) -> Self {
@@ -117,6 +119,62 @@ impl API {
         self.library_items = Some(items.clone());
         Ok(items)
     }
+}
+
+/// Rehomes an official SoundCloud resource URI onto the configured api-v2 origin.
+pub(crate) fn v2_resource_path(resource: &str) -> anyhow::Result<String> {
+    if resource.starts_with("http://") || resource.starts_with("https://") {
+        let url = Url::parse(resource)?;
+        if !matches!(url.host_str(), Some("api.soundcloud.com" | "api-v2.soundcloud.com")) {
+            anyhow::bail!("SoundCloud resource URL has an unexpected origin");
+        }
+        let mut path = url.path().to_string();
+        if let Some(query) = url.query() {
+            path.push('?');
+            path.push_str(query);
+        }
+        return Ok(path);
+    }
+    Ok(if resource.starts_with('/') {
+        resource.to_string()
+    } else {
+        format!("/{resource}")
+    })
+}
+
+pub(crate) fn append_track_collection_query(mut path: String) -> String {
+    let separator = if path.contains('?') { '&' } else { '?' };
+    path.push(separator);
+    path.push_str("linked_partitioning=true&limit=200&access=playable,preview,blocked");
+    path
+}
+
+/// Reads authenticated api-v2 JSON asynchronously for nested collection panes.
+pub(crate) async fn get_v2_json_async(
+    base_url: &str,
+    path: &str,
+    access_token: &str,
+) -> anyhow::Result<serde_json::Value> {
+    let base = Url::parse(base_url)?;
+    let request_url = base.join(path)?;
+    if request_url.scheme() != base.scheme()
+        || request_url.host_str() != base.host_str()
+        || request_url.port_or_known_default() != base.port_or_known_default()
+    {
+        anyhow::bail!("api-v2 URL is outside the configured SoundCloud origin");
+    }
+
+    Ok(reqwest::Client::new()
+        .get(request_url)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?)
 }
 
 /// Reads authenticated api-v2 JSON while enforcing same-origin cursors so a

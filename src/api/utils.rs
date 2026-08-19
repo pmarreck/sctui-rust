@@ -32,6 +32,26 @@ pub(crate) fn parse_u64(obj: &serde_json::Value, key: &str) -> u64 {
     obj.get(key).and_then(|v| v.as_u64()).unwrap_or(0)
 }
 
+/// Supplies the nested-track path omitted by current api-v2 playlist objects.
+pub(crate) fn playlist_tracks_uri(playlist: &serde_json::Value) -> String {
+    let existing = parse_str(playlist, "tracks_uri");
+    if !existing.is_empty() {
+        return existing;
+    }
+
+    let id = parse_u64(playlist, "id");
+    let id = if id > 0 {
+        Some(id)
+    } else {
+        parse_str(playlist, "urn")
+            .rsplit(':')
+            .next()
+            .and_then(|value| value.parse().ok())
+    };
+    id.map(|id| format!("/playlists/{id}/tracks"))
+        .unwrap_or_default()
+}
+
 /// Selects the preferred non-DRM HLS resolver from a complete transcoding set.
 /// MPEG audio is preferred because the playback engine already decodes it reliably.
 pub(crate) fn select_hls_transcoding_url(transcodings: &[serde_json::Value]) -> Option<String> {

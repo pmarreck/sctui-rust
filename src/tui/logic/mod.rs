@@ -34,7 +34,8 @@ use self::animation::{SinSignal, on_tick};
 use self::filtering::{build_filtered_views, clamp_selection, is_filter_active};
 use self::input::{ClickTracker, InputOutcome, handle_key_event, handle_mouse_event};
 use self::state::{
-    AppData, AppState, EngagementAction, EngagementDone, FollowingTracksFocus, PlaybackSource,
+    AppData, AppState, EngagementAction, EngagementDone, FollowingTracksFocus, PlaybackErrorNotice,
+    PlaybackSource,
 };
 use self::utils::{
     RecoveryCandidate, build_queue, play_queued_track, queued_from_current,
@@ -86,9 +87,17 @@ fn is_current_playback_failure(outcome: &PlaybackOutcome, requested_attempt_id: 
 }
 
 /// Consumes playback results once and ignores results superseded by a newer user request.
-fn handle_playback_outcomes(state: &mut AppState, data: &mut AppData, player: &Player) {
+fn handle_playback_outcomes(
+    state: &mut AppState,
+    data: &mut AppData,
+    player: &Player,
+    now: Duration,
+) {
     while let Some(outcome) = player.take_playback_outcome() {
         if is_current_playback_failure(&outcome, player.requested_attempt_id()) {
+            if let PlaybackOutcome::Failed { message, .. } = &outcome {
+                state.playback_error_notice = Some(PlaybackErrorNotice::new(message, now));
+            }
             recover_from_playback_failure(state, data, player);
         }
     }
@@ -1113,6 +1122,13 @@ fn start(
                     .current_playing_index
                     .and_then(|idx| queue_tracks.get(idx).cloned())
             });
+        let render_now = interaction_started.elapsed();
+        let playback_error = state
+            .playback_error_notice
+            .as_ref()
+            .and_then(|notice| notice.message_at(render_now))
+            .map(str::to_string)
+            .or_else(|| player.playback_error());
         terminal.draw(|frame| {
             render(
                 frame,
@@ -1196,7 +1212,7 @@ fn start(
                 state.visualizer_mode,
                 &wave_buffer,
                 state.visualizer_view,
-                player.playback_error(),
+                playback_error,
                 (interaction_started.elapsed().as_millis() / 500) as usize,
             )
         })?;
@@ -1243,7 +1259,12 @@ fn start(
             }
         }
 
-        handle_playback_outcomes(&mut state, &mut data, &player);
+        handle_playback_outcomes(
+            &mut state,
+            &mut data,
+            &player,
+            interaction_started.elapsed(),
+        );
 
         if last_tick.elapsed() >= tick_rate {
             state.progress = player.elapsed();

@@ -1,6 +1,8 @@
 use super::InputOutcome;
+use super::mouse::active_track_target;
 use crate::tui::logic::state::{AppData, AppState, PlaybackSource, FollowingTracksFocus};
 use crate::player::Player;
+use crate::tui::layout::TrackTarget;
 use crate::tui::logic::utils::{build_queue, queued_from_current};
 
 pub(crate) fn handle_enter(
@@ -8,28 +10,22 @@ pub(crate) fn handle_enter(
     data: &mut AppData,
     player: &Player,
 ) -> InputOutcome {
-    if state.selected_tab == 1 {
-        handle_search_enter(state, data, player);
-    } else if state.selected_tab == 0 && state.selected_subtab == 0 {
-        handle_likes_enter(state, data, player);
-    } else if state.selected_tab == 0 && state.selected_subtab == 1 {
-        handle_playlist_enter(state, data, player);
-    } else if state.selected_tab == 0 && state.selected_subtab == 2 {
-        handle_album_enter(state, data, player);
-    } else if state.selected_tab == 0 && state.selected_subtab == 3 {
-        handle_following_enter(state, data, player);
+    match active_track_target(state) {
+        Some(TrackTarget::Likes) => handle_likes_enter(state, data, player),
+        Some(TrackTarget::Playlist) => handle_playlist_enter(state, data, player),
+        Some(TrackTarget::Album) => handle_album_enter(state, data, player),
+        Some(TrackTarget::FollowingPublished | TrackTarget::FollowingLikes) => {
+            handle_following_enter(state, data, player)
+        }
+        Some(TrackTarget::SearchTracks) => handle_search_tracks_enter(state, data, player),
+        Some(TrackTarget::SearchPlaylist) => handle_search_playlist_enter(state, data, player),
+        Some(TrackTarget::SearchAlbum) => handle_search_album_enter(state, data, player),
+        Some(TrackTarget::SearchPersonPublished | TrackTarget::SearchPersonLikes) => {
+            handle_search_people_enter(state, data, player)
+        }
+        None => {}
     }
     InputOutcome::Continue
-}
-
-fn handle_search_enter(state: &mut AppState, data: &mut AppData, player: &Player) {
-    match state.selected_searchfilter {
-        0 => handle_search_tracks_enter(state, data, player),
-        1 => handle_search_album_enter(state, data, player),
-        2 => handle_search_playlist_enter(state, data, player),
-        3 => handle_search_people_enter(state, data, player),
-        _ => {}
-    }
 }
 
 fn handle_search_tracks_enter(state: &mut AppState, data: &mut AppData, player: &Player) {

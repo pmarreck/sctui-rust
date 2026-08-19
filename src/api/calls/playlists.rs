@@ -1,11 +1,14 @@
 use chrono::{DateTime, FixedOffset, Utc};
-use reqwest;
 use reqwest::blocking::Client;
 
 use crate::auth::{Token, try_refresh_token};
 
-use super::super::utils::{format_duration, parse_str, parse_track, parse_u64};
-use crate::api::{API, Playlist, Track};
+use super::super::utils::{
+    format_duration, parse_str, parse_track, parse_u64, playlist_tracks_uri,
+};
+use crate::api::{
+    API, API_V2_BASE_URL, Playlist, Track, get_v2_json_async, v2_resource_path,
+};
 use std::sync::{Arc, Mutex};
 
 impl API {
@@ -37,7 +40,7 @@ impl API {
                 track_count: parse_u64(playlist, "track_count").to_string(),
                 duration: format_duration(parse_u64(playlist, "duration")),
                 created_at,
-                tracks_uri: parse_str(playlist, "tracks_uri"),
+                tracks_uri: playlist_tracks_uri(playlist),
                 is_owned: kind == "playlist",
             });
         }
@@ -97,42 +100,32 @@ pub async fn fetch_playlist_tracks(
     token: Arc<Mutex<Token>>,
     tracks_uri: String,
 ) -> anyhow::Result<Vec<Track>> {
+    fetch_playlist_tracks_from_base(token, tracks_uri, API_V2_BASE_URL.into()).await
+}
+
+pub(crate) async fn fetch_playlist_tracks_from_base(
+    token: Arc<Mutex<Token>>,
+    tracks_uri: String,
+    api_v2_base_url: String,
+) -> anyhow::Result<Vec<Track>> {
     let _ = try_refresh_token(&token);
 
     let access_token = { token.lock().unwrap().access_token.clone() };
+    let resource = v2_resource_path(&tracks_uri)?;
+    let (path, query) = resource
+        .split_once('?')
+        .map(|(path, query)| (path, Some(query)))
+        .unwrap_or((resource.as_str(), None));
+    let path = path.strip_suffix("/tracks").unwrap_or(path);
+    let path = query.map_or_else(
+        || format!("{path}?representation=full"),
+        |query| format!("{path}?representation=full&{query}"),
+    );
+    let resp = get_v2_json_async(&api_v2_base_url, &path, &access_token).await?;
 
-    let mut url = if tracks_uri.starts_with("http") {
-        tracks_uri
-    } else {
-        format!("https://api.soundcloud.com{}", tracks_uri)
-    };
-    if url.contains('?') {
-        if !url.contains("linked_partitioning") {
-            url.push_str("&linked_partitioning=true");
-        }
-        if !url.contains("limit=") {
-            url.push_str("&limit=200");
-        }
-        if !url.contains("access=") {
-            url.push_str("&access=playable,preview,blocked");
-        }
-    } else {
-        url.push_str("?linked_partitioning=true&limit=200&access=playable,preview,blocked");
-    }
-
-    let resp: serde_json::Value = reqwest::Client::new()
-        .get(&url)
-        .header(
-            reqwest::header::AUTHORIZATION,
-            crate::auth::authorization_header(access_token),
-        )
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
-
-    let items = if let Some(collection) = resp.get("collection").and_then(|v| v.as_array()) {
+    let items = if let Some(tracks) = resp.get("tracks").and_then(|v| v.as_array()) {
+        tracks.clone()
+    } else if let Some(collection) = resp.get("collection").and_then(|v| v.as_array()) {
         collection.clone()
     } else if let Some(array) = resp.as_array() {
         array.clone()
@@ -153,6 +146,8 @@ mod tests {
 
     use crate::api::API;
     use crate::auth::Token;
+
+    use super::fetch_playlist_tracks_from_base;
 
     fn token() -> Arc<Mutex<Token>> {
         Arc::new(Mutex::new(
@@ -192,7 +187,7 @@ mod tests {
                     Response::from_string(
                         r#"{
                             "collection": [
-                                {"type":"playlist","playlist":{"title":"Owned fixture","playlist_type":"PLAYLIST","track_count":3,"duration":180000,"created_at":"2026-08-19T12:00:00Z","tracks_uri":"/playlists/1/tracks","user":{"username":"owner"}}},
+                                {"type":"playlist","playlist":{"id":1,"title":"Owned fixture","playlist_type":"PLAYLIST","track_count":3,"duration":180000,"created_at":"2026-08-19T12:00:00Z","user":{"username":"owner"}}},
                                 {"type":"playlist-like","playlist":{"title":"Liked fixture","playlist_type":"PLAYLIST","track_count":4,"duration":240000,"created_at":"2026-08-18T12:00:00Z","tracks_uri":"/playlists/2/tracks","user":{"username":"other"}}},
                                 {"type":"playlist-like","playlist":{"title":"Album fixture","playlist_type":"album","track_count":5,"duration":300000,"created_at":"2026-08-17T12:00:00Z","release_year":2026,"tracks_uri":"/playlists/3/tracks","user":{"username":"artist"}}}
                             ]
@@ -218,6 +213,7 @@ mod tests {
         assert_eq!(albums.len(), 1);
         assert_eq!(albums[0].title, "Album fixture");
         assert_eq!(albums[0].artists, "artist");
+        assert_eq!(playlists[0].tracks_uri, "/playlists/1/tracks");
         assert_eq!(
             *observed.lock().unwrap(),
             vec![(
@@ -225,5 +221,65 @@ mod tests {
                 Some("OAuth browser-token".into())
             )]
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn nested_playlist_tracks_convert_legacy_uri_to_the_v2_origin() {
+        let server = Server::http("127.0.0.1:0").unwrap();
+        let base_url = format!("http://{}", server.server_addr().to_ip().unwrap());
+        let responder = thread::spawn(move || {
+            let request = server
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .expect("playlist tracks request");
+            assert_eq!(
+                request.url(),
+                "/playlists/77?representation=full"
+            );
+            request
+                .respond(
+                    Response::from_string(
+                        r#"{"tracks":[{"title":"Nested fixture","duration":180000,"urn":"soundcloud:tracks:77","access":"playable","user":{"username":"fixture"},"media":{"transcodings":[{"url":"https://resolver.example/hls","format":{"protocol":"hls","mime_type":"audio/mpeg"}}]}}]}"#,
+                    )
+                    .with_header(Header::from_bytes("Content-Type", "application/json").unwrap()),
+                )
+                .unwrap();
+        });
+
+        let tracks = fetch_playlist_tracks_from_base(
+            token(),
+            "https://api.soundcloud.com/playlists/77/tracks".into(),
+            base_url,
+        )
+        .await
+        .unwrap();
+        responder.join().unwrap();
+
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0].title, "Nested fixture");
+        assert_eq!(tracks[0].stream_url, "https://resolver.example/hls");
+    }
+
+    #[test]
+    #[ignore = "uses Peter's live Firefox session and SoundCloud library"]
+    fn live_browser_session_loads_tracks_for_a_nonempty_playlist() {
+        let token = Arc::new(Mutex::new(crate::auth::initial_token().unwrap()));
+        let mut api = API::init(Arc::clone(&token));
+        let playlist = api
+            .get_playlists()
+            .unwrap()
+            .into_iter()
+            .find(|playlist| playlist.track_count != "0")
+            .expect("a nonempty playlist");
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let tracks = runtime
+            .block_on(super::fetch_playlist_tracks(token, playlist.tracks_uri))
+            .unwrap();
+
+        assert!(!tracks.is_empty());
     }
 }
