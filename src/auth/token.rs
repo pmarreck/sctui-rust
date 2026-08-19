@@ -50,6 +50,7 @@ impl Token {
     }
 
     /// Formats the authorization scheme required by SoundCloud's API.
+    #[allow(dead_code)]
     pub fn authorization_header(&self) -> String {
         authorization_header(&self.access_token)
     }
@@ -64,6 +65,7 @@ impl Token {
         self.refresh_enabled = false;
     }
 
+    #[allow(dead_code)]
     pub fn source_label(&self) -> String {
         match &self.source {
             TokenSource::Application => "SoundCloud OAuth".into(),

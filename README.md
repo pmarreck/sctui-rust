@@ -16,6 +16,8 @@ On startup, `sctui` uses the first available credential source in this order:
 
 Firefox fallback supports standard Firefox, Snap Firefox, and Flatpak Firefox profiles on Linux, plus the standard profile locations on macOS and Windows. It reads a private snapshot of `cookies.sqlite` and its WAL sidecars. Browser credentials are used only for the current process and are never written to `token.json`.
 
+SoundCloud rejects browser-session tokens on several legacy `api.soundcloud.com/me/*` routes. For Firefox sessions, `sctui` resolves the signed-in user through api-v2 and uses its user-scoped likes, library, and following collections.
+
 ## Build and test
 
 Run `nix build` for the pinned, sandboxed release build. The executable is installed at `result/bin/sctui`; this checkout's `bin` symlink can expose it as `bin/sctui`.

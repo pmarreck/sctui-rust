@@ -1,99 +1,48 @@
 use chrono::{DateTime, FixedOffset, Utc};
-use reqwest::blocking::Client;
 use reqwest;
+use reqwest::blocking::Client;
 
 use crate::auth::{Token, try_refresh_token};
 
-use super::super::utils::{format_duration, format_playback_count, parse_next_href, parse_str, parse_u64};
+use super::super::utils::{format_duration, format_playback_count, parse_str, parse_u64};
 use crate::api::{API, Playlist, Track};
 use std::sync::{Arc, Mutex};
 
 impl API {
     pub fn get_playlists(&mut self) -> anyhow::Result<Vec<Playlist>> {
-        let _ = try_refresh_token(&self.token);
-
-        let token_guard = self.token.lock().unwrap();
-
-        let should_fetch_my =
-            !self.my_first_playlist_page_fetched || self.my_playlists_next_href.is_some();
-        let should_fetch_others =
-            !self.others_first_playlist_page_fetched || self.others_playlists_next_href.is_some();
-
-        if !should_fetch_my && !should_fetch_others {
+        if self.library_playlists_delivered {
             return Ok(Vec::new());
         }
 
-        let urls = vec![
-            self.my_playlists_next_href.clone().unwrap_or_else(|| {
-                "https://api.soundcloud.com/me/playlists?linked_partitioning=true&limit=40&show_tracks=false".to_string()
-            }),
-            self.others_playlists_next_href.clone().unwrap_or_else(|| {
-                "https://api.soundcloud.com/me/likes/playlists?limit=40&linked_partitioning=true"
-                    .to_string()
-            }),
-        ];
-
+        let items = self.library_items()?;
         let mut playlists = Vec::new();
-
-        for (i, url) in urls.iter().enumerate() {
-            if (i == 0 && !should_fetch_my) || (i == 1 && !should_fetch_others) {
+        for item in items {
+            let kind = parse_str(&item, "type");
+            if kind != "playlist" && kind != "playlist-like" {
                 continue;
             }
-            let resp: serde_json::Value = Client::new()
-                .get(url)
-                .header(
-                    reqwest::header::AUTHORIZATION,
-                    crate::auth::authorization_header(&token_guard.access_token),
-                )
-                .send()?
-                .error_for_status()?
-                .json()?;
-
-            let next_href = parse_next_href(&resp);
-            if i == 0 {
-                self.my_playlists_next_href = next_href;
-                self.my_first_playlist_page_fetched = true;
-            } else {
-                self.others_playlists_next_href = next_href;
-                self.others_first_playlist_page_fetched = true;
+            let Some(playlist) = item.get("playlist").filter(|value| !value.is_null()) else {
+                continue;
+            };
+            if parse_str(playlist, "playlist_type").eq_ignore_ascii_case("album") {
+                continue;
             }
 
-            if let Some(collection) = resp.get("collection").and_then(|v| v.as_array()) {
-                for playlist in collection {
-                    if i == 1
-                        && playlist
-                            .get("playlist_type")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            != "PLAYLIST"
-                    {
-                        continue;
-                    }
-
-                    let title = parse_str(&playlist, "title");
-                    let track_count = parse_u64(&playlist, "track_count").to_string();
-                    let duration = format_duration(parse_u64(&playlist, "duration"));
-                    let created_at = DateTime::parse_from_str(
-                        &parse_str(&playlist, "created_at"),
-                        "%Y/%m/%d %H:%M:%S %z",
-                    )
-                    .unwrap_or_else(|_| {
-                        Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap())
-                    });
-                    let tracks_uri = parse_str(&playlist, "tracks_uri");
-
-                    playlists.push(Playlist {
-                        title,
-                        track_count,
-                        duration,
-                        created_at,
-                        tracks_uri,
-                        is_owned: i == 0,
-                    });
-                }
-            }
+            let created_at_text = parse_str(playlist, "created_at");
+            let created_at = DateTime::parse_from_rfc3339(&created_at_text)
+                .or_else(|_| DateTime::parse_from_str(&created_at_text, "%Y/%m/%d %H:%M:%S %z"))
+                .unwrap_or_else(|_| Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap()));
+            playlists.push(Playlist {
+                title: parse_str(playlist, "title"),
+                track_count: parse_u64(playlist, "track_count").to_string(),
+                duration: format_duration(parse_u64(playlist, "duration")),
+                created_at,
+                tracks_uri: parse_str(playlist, "tracks_uri"),
+                is_owned: kind == "playlist",
+            });
         }
 
+        self.library_playlists_delivered = true;
         playlists.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         Ok(playlists)
     }
@@ -266,4 +215,89 @@ pub async fn fetch_playlist_tracks(
     }
 
     Ok(tracks)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+    use std::time::Duration;
+
+    use tiny_http::{Header, Response, Server};
+
+    use crate::api::API;
+    use crate::auth::Token;
+
+    fn token() -> Arc<Mutex<Token>> {
+        Arc::new(Mutex::new(
+            serde_json::from_value(serde_json::json!({
+                "access_token": "browser-token",
+                "refresh_token": "refresh",
+                "obtained_at": 4_000_000_000_u64
+            }))
+            .unwrap(),
+        ))
+    }
+
+    #[test]
+    fn browser_session_loads_playlists_and_albums_from_one_v2_library_page() {
+        let server = Server::http("127.0.0.1:0").unwrap();
+        let base_url = format!("http://{}", server.server_addr().to_ip().unwrap());
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let server_observed = Arc::clone(&observed);
+
+        let responder = thread::spawn(move || {
+            let request = server
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .expect("library request");
+            let authorization = request
+                .headers()
+                .iter()
+                .find(|header| header.field.equiv("Authorization"))
+                .map(|header| header.value.as_str().to_string());
+            server_observed
+                .lock()
+                .unwrap()
+                .push((request.url().to_string(), authorization));
+
+            request
+                .respond(
+                    Response::from_string(
+                        r#"{
+                            "collection": [
+                                {"type":"playlist","playlist":{"title":"Owned fixture","playlist_type":"PLAYLIST","track_count":3,"duration":180000,"created_at":"2026-08-19T12:00:00Z","tracks_uri":"/playlists/1/tracks","user":{"username":"owner"}}},
+                                {"type":"playlist-like","playlist":{"title":"Liked fixture","playlist_type":"PLAYLIST","track_count":4,"duration":240000,"created_at":"2026-08-18T12:00:00Z","tracks_uri":"/playlists/2/tracks","user":{"username":"other"}}},
+                                {"type":"playlist-like","playlist":{"title":"Album fixture","playlist_type":"album","track_count":5,"duration":300000,"created_at":"2026-08-17T12:00:00Z","release_year":2026,"tracks_uri":"/playlists/3/tracks","user":{"username":"artist"}}}
+                            ]
+                        }"#,
+                    )
+                    .with_header(Header::from_bytes("Content-Type", "application/json").unwrap()),
+                )
+                .unwrap();
+        });
+
+        let mut api = API::init_with_api_v2_base_url(token(), base_url);
+        let playlists = api.get_playlists().unwrap();
+        let albums = api.get_albums().unwrap();
+        responder.join().unwrap();
+
+        assert_eq!(
+            playlists
+                .iter()
+                .map(|playlist| (&*playlist.title, playlist.is_owned))
+                .collect::<Vec<_>>(),
+            vec![("Owned fixture", true), ("Liked fixture", false)]
+        );
+        assert_eq!(albums.len(), 1);
+        assert_eq!(albums[0].title, "Album fixture");
+        assert_eq!(albums[0].artists, "artist");
+        assert_eq!(
+            *observed.lock().unwrap(),
+            vec![(
+                "/me/library/all?limit=200&linked_partitioning=true".into(),
+                Some("OAuth browser-token".into())
+            )]
+        );
+    }
 }
