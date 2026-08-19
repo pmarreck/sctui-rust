@@ -30,7 +30,7 @@
   - Curiosity poke: keep Peter's local credential files out of Git and verify the exact pushed commit rather than a moving branch.
 - [ ] Verify Mechatron Prime on the pushed implementation.
   - Dependency: live Mechatron verification requires the still-unprovisioned signed webhook above.
-  - Current state: `origin/main` contains implementation commit `cba90c7`; no matching webhook exists and the badge endpoint returns HTTP 404.
+  - Current state: no matching webhook exists, Mechatron has no queued sctui-rust build, and the badge endpoint returns HTTP 404.
 - [x] Reproduce the Firefox-session `403 Forbidden` response with a deterministic failing test and identify the selected-cookie or request mismatch. (completed 2026-08-19 01:06 PM EDT)
   - Curiosity poke: distinguish an expired/stale cookie, the wrong Firefox container/profile, and a SoundCloud authorization-header mismatch without exposing credential values.
   - Finding: the selected live cookie is valid; SoundCloud rejects browser-session tokens on legacy personalized routes while accepting api-v2 user-scoped routes.
@@ -40,5 +40,6 @@
 - [x] Run the full Cargo and Nix checks and update documentation. (completed 2026-08-19 01:06 PM EDT)
   - Curiosity poke: test authentication independently from terminal initialization and audio teardown noise.
   - Result: 18 tests and the hermetic Nix build pass; a live PTY probe reaches interactive input without an HTTP error.
-- [ ] Commit and push the personalized api-v2 route fix.
+- [x] Commit and push the personalized api-v2 route fix. (completed 2026-08-19 01:10 PM EDT)
   - Curiosity poke: confirm the pushed commit exactly matches the locally tested Nix output.
+  - Result: implementation commit `e6b5f54` is present at both local `HEAD` and `origin/main` after an independent fetch.
