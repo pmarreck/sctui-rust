@@ -18,6 +18,18 @@ Firefox fallback supports standard Firefox, Snap Firefox, and Flatpak Firefox pr
 
 SoundCloud rejects browser-session tokens on several legacy `api.soundcloud.com/me/*` routes. For Firefox sessions, `sctui` resolves the signed-in user through api-v2 and uses its user-scoped likes, library, and following collections.
 
+Playback likewise uses the API-v2 transcoding metadata returned with each track. Playback failures are shown in red in the status line instead of being discarded by the audio worker.
+
+## Controls
+
+The italic status line between the active list and player shows every keyboard shortcut in a scrolling marquee. Press `Shift+H` for the full help popup.
+
+Mouse controls are also available:
+
+- Click a main tab, library section, or search filter to select it.
+- Click a track once to select it and twice within 400 ms to play it.
+- Click the playback progress bar to restart the current track at that position.
+
 ## Build and test
 
 Run `nix build` for the pinned, sandboxed release build. The executable is installed at `result/bin/sctui`; this checkout's `bin` symlink can expose it as `bin/sctui`.
@@ -27,6 +39,8 @@ Run the same build and test derivation used by Mechatron Prime with:
 ```sh
 nix build .#checks.x86_64-linux.default
 ```
+
+The development shell includes Rustfmt; run `nix develop -c cargo fmt` to format Rust sources.
 
 ## Features
 

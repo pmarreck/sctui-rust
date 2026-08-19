@@ -22,6 +22,7 @@ pub struct Player {
     current_track: Arc<Mutex<Option<Track>>>,
     sink: Arc<Mutex<Option<Sink>>>,
     wave_buffer: Arc<Mutex<VecDeque<f32>>>,
+    last_error: Arc<Mutex<Option<String>>>,
 }
 
 impl Player {
@@ -34,6 +35,7 @@ impl Player {
         let last_start = Arc::new(Mutex::new(None));
         let current_track = Arc::new(Mutex::new(None));
         let wave_buffer = Arc::new(Mutex::new(VecDeque::new()));
+        let last_error = Arc::new(Mutex::new(None));
 
         {
             let flag_clone = Arc::clone(&is_playing_flag);
@@ -44,6 +46,7 @@ impl Player {
             let track_clone = Arc::clone(&current_track);
             let seeking_clone = Arc::clone(&is_seeking_flag);
             let wave_buffer_clone = Arc::clone(&wave_buffer);
+            let last_error_clone = Arc::clone(&last_error);
 
             thread::spawn(move || {
                 player_loop(
@@ -56,6 +59,7 @@ impl Player {
                     last_start_clone,
                     track_clone,
                     wave_buffer_clone,
+                    last_error_clone,
                 );
             });
         }
@@ -69,6 +73,7 @@ impl Player {
             current_track,
             sink,
             wave_buffer,
+            last_error,
         }
     }
 
@@ -108,6 +113,20 @@ impl Player {
 
     pub fn rewind(&self) {
         let _ = self.tx.send(PlayerCommand::Rewind);
+    }
+
+    /// Restarts the current track at the requested absolute position.
+    pub fn seek(&self, position_ms: u64) {
+        if let Some(track) = self.current_track.lock().unwrap().clone() {
+            let clamped = position_ms.min(track.duration_ms);
+            let _ = self
+                .tx
+                .send(PlayerCommand::PlayFromPosition(track, clamped));
+        }
+    }
+
+    pub fn playback_error(&self) -> Option<String> {
+        self.last_error.lock().unwrap().clone()
     }
 
     pub fn preload_next(&self, track: Track) {

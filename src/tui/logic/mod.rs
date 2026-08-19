@@ -1,6 +1,6 @@
+mod animation;
 mod filtering;
 mod input;
-mod animation;
 pub(crate) mod state;
 mod utils;
 
@@ -13,7 +13,8 @@ use crate::api::{
 use crate::player::Player;
 use ratatui::{
     DefaultTerminal,
-    crossterm::event::{self, Event},
+    crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event},
+    layout::Rect,
 };
 
 use std::result::Result::Ok;
@@ -21,20 +22,22 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use image::DynamicImage;
 use ratatui_image::{
     errors::Errors,
     picker::Picker,
     thread::{ResizeRequest, ResizeResponse, ThreadProtocol},
 };
 use reqwest;
-use image::DynamicImage;
 
-use super::render::render;
-use self::filtering::{build_filtered_views, clamp_selection, is_filter_active};
-use self::input::{handle_key_event, InputOutcome};
 use self::animation::{SinSignal, on_tick};
-use self::state::{AppData, AppState, EngagementAction, EngagementDone, FollowingTracksFocus, PlaybackSource};
+use self::filtering::{build_filtered_views, clamp_selection, is_filter_active};
+use self::input::{ClickTracker, InputOutcome, handle_key_event, handle_mouse_event};
+use self::state::{
+    AppData, AppState, EngagementAction, EngagementDone, FollowingTracksFocus, PlaybackSource,
+};
 use self::utils::{build_queue, play_queued_track, queued_from_current};
+use super::render::render;
 
 const TAB_TITLES: [&str; 3] = ["Library", "Search", "Feed"];
 const SUBTAB_TITLES: [&str; 4] = ["Likes", "Playlists", "Albums", "Following"];
@@ -47,9 +50,16 @@ enum AppEvent {
 pub fn run(api: &mut Arc<Mutex<API>>, player: Player) -> anyhow::Result<()> {
     color_eyre::install().map_err(|e| anyhow::anyhow!(e))?;
     let terminal = ratatui::init();
+    if let Err(error) = ratatui::crossterm::execute!(std::io::stdout(), EnableMouseCapture) {
+        ratatui::restore();
+        return Err(error.into());
+    }
     let result = start(terminal, api, player);
+    let mouse_result = ratatui::crossterm::execute!(std::io::stdout(), DisableMouseCapture);
     ratatui::restore();
-    result
+    result?;
+    mouse_result?;
+    Ok(())
 }
 
 fn spawn_fetch<T, F>(api: Arc<Mutex<API>>, tx: std::sync::mpsc::Sender<T>, fetch_fn: F)
@@ -85,8 +95,10 @@ fn start(
     let mut window = [0.0, 20.0];
     let async_rt = tokio::runtime::Runtime::new().unwrap();
 
-    let (tx_likes, rx_likes): (Sender<Vec<crate::api::Track>>, Receiver<Vec<crate::api::Track>>) =
-        mpsc::channel();
+    let (tx_likes, rx_likes): (
+        Sender<Vec<crate::api::Track>>,
+        Receiver<Vec<crate::api::Track>>,
+    ) = mpsc::channel();
     let (tx_playlists, rx_playlists): (
         Sender<Vec<crate::api::Playlist>>,
         Receiver<Vec<crate::api::Playlist>>,
@@ -99,8 +111,10 @@ fn start(
         Sender<(u64, Vec<crate::api::Track>)>,
         Receiver<(u64, Vec<crate::api::Track>)>,
     ) = mpsc::channel();
-    let (tx_albums, rx_albums): (Sender<Vec<crate::api::Album>>, Receiver<Vec<crate::api::Album>>) =
-        mpsc::channel();
+    let (tx_albums, rx_albums): (
+        Sender<Vec<crate::api::Album>>,
+        Receiver<Vec<crate::api::Album>>,
+    ) = mpsc::channel();
     let (tx_following, rx_following): (
         Sender<Vec<crate::api::Artist>>,
         Receiver<Vec<crate::api::Artist>>,
@@ -162,11 +176,13 @@ fn start(
 
     {
         let tx_main_render = tx_main.clone();
-        std::thread::spawn(move || loop {
-            if let Ok(request) = rx_worker.recv() {
-                tx_main_render
-                    .send(AppEvent::Redraw(request.resize_encode()))
-                    .unwrap();
+        std::thread::spawn(move || {
+            loop {
+                if let Ok(request) = rx_worker.recv() {
+                    tx_main_render
+                        .send(AppEvent::Redraw(request.resize_encode()))
+                        .unwrap();
+                }
             }
         });
     }
@@ -178,6 +194,8 @@ fn start(
     let wave_buffer = player.wave_buffer();
     let tick_rate = Duration::from_millis(200);
     let mut last_tick = Instant::now();
+    let interaction_started = Instant::now();
+    let mut click_tracker = ClickTracker::default();
 
     loop {
         data.apply_updates(
@@ -361,36 +379,43 @@ fn start(
                     EngagementAction::LikeTrack { track, track_id } => like_track(token, track_id)
                         .await
                         .map(|_| EngagementDone::LikedTrack(track)),
-                    EngagementAction::UnlikeTrack { track_urn, track_id } => {
-                        unlike_track(token, track_id)
-                            .await
-                            .map(|_| EngagementDone::UnlikedTrack { track_urn })
-                    }
+                    EngagementAction::UnlikeTrack {
+                        track_urn,
+                        track_id,
+                    } => unlike_track(token, track_id)
+                        .await
+                        .map(|_| EngagementDone::UnlikedTrack { track_urn }),
                     EngagementAction::LikePlaylist {
                         playlist,
                         playlist_id,
                     } => like_playlist(token, playlist_id)
                         .await
                         .map(|_| EngagementDone::LikedPlaylist(playlist)),
-                    EngagementAction::UnlikePlaylist { tracks_uri, playlist_id } => {
-                        unlike_playlist(token, playlist_id)
-                            .await
-                            .map(|_| EngagementDone::UnlikedPlaylist { tracks_uri })
-                    }
-                    EngagementAction::LikeAlbum { album, playlist_id } => like_playlist(token, playlist_id)
+                    EngagementAction::UnlikePlaylist {
+                        tracks_uri,
+                        playlist_id,
+                    } => unlike_playlist(token, playlist_id)
                         .await
-                        .map(|_| EngagementDone::LikedAlbum(album)),
-                    EngagementAction::UnlikeAlbum { tracks_uri, playlist_id } => {
-                        unlike_playlist(token, playlist_id)
+                        .map(|_| EngagementDone::UnlikedPlaylist { tracks_uri }),
+                    EngagementAction::LikeAlbum { album, playlist_id } => {
+                        like_playlist(token, playlist_id)
                             .await
-                            .map(|_| EngagementDone::UnlikedAlbum { tracks_uri })
+                            .map(|_| EngagementDone::LikedAlbum(album))
                     }
+                    EngagementAction::UnlikeAlbum {
+                        tracks_uri,
+                        playlist_id,
+                    } => unlike_playlist(token, playlist_id)
+                        .await
+                        .map(|_| EngagementDone::UnlikedAlbum { tracks_uri }),
                     EngagementAction::FollowUser { artist, user_id } => follow_user(token, user_id)
                         .await
                         .map(|_| EngagementDone::FollowedUser(artist)),
-                    EngagementAction::UnfollowUser { urn, user_id } => unfollow_user(token, user_id)
-                        .await
-                        .map(|_| EngagementDone::UnfollowedUser { urn }),
+                    EngagementAction::UnfollowUser { urn, user_id } => {
+                        unfollow_user(token, user_id)
+                            .await
+                            .map(|_| EngagementDone::UnfollowedUser { urn })
+                    }
                 };
                 if let Ok(done) = result {
                     let _ = tx.send(done);
@@ -541,8 +566,7 @@ fn start(
                     if let Some(handle) = state.album_tracks_task.take() {
                         handle.abort();
                     }
-                    state.album_tracks_request_id =
-                        state.album_tracks_request_id.wrapping_add(1);
+                    state.album_tracks_request_id = state.album_tracks_request_id.wrapping_add(1);
                     let request_id = state.album_tracks_request_id;
                     let token = {
                         let api_guard = api.lock().unwrap();
@@ -604,7 +628,8 @@ fn start(
                     state.following_tracks_focus = FollowingTracksFocus::Published;
                     let tx = tx_following_tracks.clone();
                     state.following_tracks_task = Some(async_rt.spawn(async move {
-                        if let Ok(tracks) = fetch_following_tracks(token, user_urn_for_tracks).await {
+                        if let Ok(tracks) = fetch_following_tracks(token, user_urn_for_tracks).await
+                        {
                             let _ = tx.send((request_id, tracks));
                         }
                     }));
@@ -632,7 +657,9 @@ fn start(
                     state.selected_following_like_row = 0;
                     let tx = tx_following_likes.clone();
                     state.following_likes_task = Some(async_rt.spawn(async move {
-                        if let Ok(tracks) = fetch_following_liked_tracks(token, user_urn_for_likes).await {
+                        if let Ok(tracks) =
+                            fetch_following_liked_tracks(token, user_urn_for_likes).await
+                        {
                             let _ = tx.send((request_id, tracks));
                         }
                     }));
@@ -770,13 +797,17 @@ fn start(
         if state.selected_tab == 1 {
             match state.selected_searchfilter {
                 0 => {
-                    if !data.search_tracks.is_empty() && state.selected_row >= data.search_tracks.len() {
+                    if !data.search_tracks.is_empty()
+                        && state.selected_row >= data.search_tracks.len()
+                    {
                         state.selected_row = data.search_tracks.len() - 1;
                     }
                     data.search_tracks_state.select(Some(state.selected_row));
                 }
                 1 => {
-                    if !data.search_albums.is_empty() && state.selected_row >= data.search_albums.len() {
+                    if !data.search_albums.is_empty()
+                        && state.selected_row >= data.search_albums.len()
+                    {
                         state.selected_row = data.search_albums.len() - 1;
                         data.search_albums_state.select(Some(state.selected_row));
                     }
@@ -790,7 +821,9 @@ fn start(
                     }
                 }
                 3 => {
-                    if !data.search_people.is_empty() && state.selected_row >= data.search_people.len() {
+                    if !data.search_people.is_empty()
+                        && state.selected_row >= data.search_people.len()
+                    {
                         state.selected_row = data.search_people.len() - 1;
                         data.search_people_state.select(Some(state.selected_row));
                     }
@@ -920,7 +953,8 @@ fn start(
                     state.search_people_tracks_focus = FollowingTracksFocus::Published;
                     let tx = tx_search_people_tracks.clone();
                     state.search_people_tracks_task = Some(async_rt.spawn(async move {
-                        if let Ok(tracks) = fetch_following_tracks(token, user_urn_for_tracks).await {
+                        if let Ok(tracks) = fetch_following_tracks(token, user_urn_for_tracks).await
+                        {
                             let _ = tx.send((request_id, tracks));
                         }
                     }));
@@ -948,7 +982,9 @@ fn start(
                     state.search_selected_person_like_row = 0;
                     let tx = tx_search_people_likes.clone();
                     state.search_people_likes_task = Some(async_rt.spawn(async move {
-                        if let Ok(tracks) = fetch_following_liked_tracks(token, user_urn_for_likes).await {
+                        if let Ok(tracks) =
+                            fetch_following_liked_tracks(token, user_urn_for_likes).await
+                        {
                             let _ = tx.send((request_id, tracks));
                         }
                     }));
@@ -1083,6 +1119,8 @@ fn start(
                 state.visualizer_mode,
                 &wave_buffer,
                 state.visualizer_view,
+                player.playback_error(),
+                (interaction_started.elapsed().as_millis() / 500) as usize,
             )
         })?;
 
@@ -1105,6 +1143,18 @@ fn start(
                         cover_art_async.empty_protocol();
                     }
                 }
+                Event::Mouse(mouse) => {
+                    let size = terminal.size()?;
+                    handle_mouse_event(
+                        mouse,
+                        Rect::new(0, 0, size.width, size.height),
+                        interaction_started.elapsed(),
+                        &mut click_tracker,
+                        &mut state,
+                        &mut data,
+                        &player,
+                    );
+                }
                 _ => {}
             }
         }
@@ -1120,10 +1170,11 @@ fn start(
             let current_track = player.current_track();
             if is_playing && !current_track.track_urn.is_empty() {
                 let preload_threshold = (current_track.duration_ms as f64 * 0.8) as u64;
-                let should_preload = state.progress >= preload_threshold 
+                let should_preload = state.progress >= preload_threshold
                     && state.progress < current_track.duration_ms.saturating_sub(100)
-                    && state.preload_triggered_for_track_urn.as_deref() != Some(current_track.track_urn.as_str());
-                
+                    && state.preload_triggered_for_track_urn.as_deref()
+                        != Some(current_track.track_urn.as_str());
+
                 if should_preload {
                     if let Some(current_idx) = state.current_playing_index {
                         let active_tracks = match state.playback_source {
@@ -1142,21 +1193,28 @@ fn start(
                             active_tracks.get(next_idx).cloned()
                         } else {
                             if state.auto_queue.is_empty() {
-                                state.auto_queue = build_queue(current_idx, active_tracks, state.shuffle_enabled);
+                                state.auto_queue =
+                                    build_queue(current_idx, active_tracks, state.shuffle_enabled);
                             }
-                            state.auto_queue.front().and_then(|&idx| active_tracks.get(idx).cloned())
+                            state
+                                .auto_queue
+                                .front()
+                                .and_then(|&idx| active_tracks.get(idx).cloned())
                         };
 
                         if let Some(track) = next_track {
                             if track.track_urn != current_track.track_urn && track.is_playable() {
                                 player.preload_next(track);
-                                state.preload_triggered_for_track_urn = Some(current_track.track_urn.clone());
+                                state.preload_triggered_for_track_urn =
+                                    Some(current_track.track_urn.clone());
                             }
                         }
                     }
                 }
 
-                if state.preload_triggered_for_track_urn.as_deref() != Some(current_track.track_urn.as_str()) {
+                if state.preload_triggered_for_track_urn.as_deref()
+                    != Some(current_track.track_urn.as_str())
+                {
                     state.preload_triggered_for_track_urn = None;
                 }
 
@@ -1165,24 +1223,13 @@ fn start(
 
                 if !at_end {
                     state.end_handled_track_urn = None;
-                } else if state.end_handled_track_urn.as_deref() != Some(current_track.track_urn.as_str()) {
+                } else if state.end_handled_track_urn.as_deref()
+                    != Some(current_track.track_urn.as_str())
+                {
                     state.end_handled_track_urn = Some(current_track.track_urn.clone());
 
                     if let Some(current_idx) = state.current_playing_index {
                         if state.repeat_enabled {
-                        let active_tracks = match state.playback_source {
-                            PlaybackSource::Likes => &data.likes,
-                            PlaybackSource::Playlist
-                            | PlaybackSource::Album
-                            | PlaybackSource::FollowingPublished
-                            | PlaybackSource::FollowingLikes => &data.playback_tracks,
-                        };
-                        if let Some(track) = active_tracks.get(current_idx) {
-                            player.play(track.clone());
-                            state.override_playing = None;
-                        }
-                        } else {
-                            if state.manual_queue.is_empty() && state.auto_queue.is_empty() {
                             let active_tracks = match state.playback_source {
                                 PlaybackSource::Likes => &data.likes,
                                 PlaybackSource::Playlist
@@ -1190,21 +1237,34 @@ fn start(
                                 | PlaybackSource::FollowingPublished
                                 | PlaybackSource::FollowingLikes => &data.playback_tracks,
                             };
+                            if let Some(track) = active_tracks.get(current_idx) {
+                                player.play(track.clone());
+                                state.override_playing = None;
+                            }
+                        } else {
+                            if state.manual_queue.is_empty() && state.auto_queue.is_empty() {
+                                let active_tracks = match state.playback_source {
+                                    PlaybackSource::Likes => &data.likes,
+                                    PlaybackSource::Playlist
+                                    | PlaybackSource::Album
+                                    | PlaybackSource::FollowingPublished
+                                    | PlaybackSource::FollowingLikes => &data.playback_tracks,
+                                };
                                 state.auto_queue =
                                     build_queue(current_idx, active_tracks, state.shuffle_enabled);
                             }
                             if let Some(queued) = state.manual_queue.pop_front() {
-                            if let Some(current) = queued_from_current(&state, &data) {
-                                state.playback_history.push(current);
-                            }
+                                if let Some(current) = queued_from_current(&state, &data) {
+                                    state.playback_history.push(current);
+                                }
                                 play_queued_track(queued, &mut state, &mut data, &player, true);
                             } else if let Some(next_idx) = state.auto_queue.pop_front() {
                                 let active_tracks = match state.playback_source {
-                                PlaybackSource::Likes => &data.likes,
-                                PlaybackSource::Playlist
-                                | PlaybackSource::Album
-                                | PlaybackSource::FollowingPublished
-                                | PlaybackSource::FollowingLikes => &data.playback_tracks,
+                                    PlaybackSource::Likes => &data.likes,
+                                    PlaybackSource::Playlist
+                                    | PlaybackSource::Album
+                                    | PlaybackSource::FollowingPublished
+                                    | PlaybackSource::FollowingLikes => &data.playback_tracks,
                                 };
                                 if let Some(track) = active_tracks.get(next_idx) {
                                     if let Some(current) = queued_from_current(&state, &data) {
@@ -1383,6 +1443,8 @@ fn start(
                     state.visualizer_mode,
                     &wave_buffer,
                     state.visualizer_view,
+                    player.playback_error(),
+                    (interaction_started.elapsed().as_millis() / 500) as usize,
                 )
             })?;
 

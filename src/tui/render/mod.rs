@@ -1,16 +1,17 @@
 mod now_playing;
 mod overlays;
+mod status;
 mod tabs;
 mod utils;
 mod visualizer;
 
+use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use std::collections::HashSet;
 
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Layout},
+    layout::Alignment,
     style::{Color, Modifier, Style},
     text::Span,
     widgets::{Block, BorderType, Borders, TableState, Tabs},
@@ -18,6 +19,7 @@ use ratatui::{
 use ratatui_image::thread::ThreadProtocol;
 
 use crate::api::{Album, Artist, Playlist, Track};
+use crate::tui::layout::root_regions;
 use crate::tui::logic::state::QueuedTrack;
 use crate::tui::render::visualizer::render_visualizer;
 
@@ -102,21 +104,13 @@ pub fn render(
     visualizer_mode: bool,
     wave_buffer: &Arc<Mutex<VecDeque<f32>>>,
     visualizer_view: crate::tui::logic::state::VisualizerMode,
+    playback_error: Option<String>,
+    status_scroll: usize,
 ) {
     let _ = search_match_count;
     let width = frame.area().width as usize;
 
-    let chunks = Layout::default()
-        .direction(ratatui::layout::Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Length(3),
-                Constraint::Min(0),
-                Constraint::Length(7),
-            ]
-            .as_ref(),
-        )
-        .split(frame.area());
+    let regions = root_regions(frame.area());
 
     if visualizer_mode {
         render_visualizer(frame, frame.area(), wave_buffer, visualizer_view);
@@ -135,12 +129,12 @@ pub fn render(
         return;
     }
 
-    render_tabs(frame, chunks[0], tab_titles, selected_tab);
+    render_tabs(frame, regions.tabs, tab_titles, selected_tab);
 
     if selected_tab == 0 {
         tabs::render_library(
             frame,
-            chunks[1],
+            regions.content,
             width,
             likes_view,
             likes_state,
@@ -172,7 +166,7 @@ pub fn render(
     } else if selected_tab == 1 {
         tabs::render_search(
             frame,
-            chunks[1],
+            regions.content,
             width,
             query,
             searchfilters,
@@ -207,7 +201,7 @@ pub fn render(
     } else {
         tabs::render_feed(
             frame,
-            chunks[1],
+            regions.content,
             width,
             selected_row,
             selected_info_row,
@@ -217,7 +211,7 @@ pub fn render(
 
     now_playing::render_now_playing(
         frame,
-        chunks[2],
+        regions.now_playing,
         data,
         window,
         progress,
@@ -226,6 +220,13 @@ pub fn render(
         current_volume,
         shuffle_enabled,
         repeat_enabled,
+    );
+
+    status::render_status(
+        frame,
+        regions.status,
+        playback_error.as_deref(),
+        status_scroll,
     );
 
     overlays::render_overlays(
@@ -242,7 +243,12 @@ pub fn render(
     );
 }
 
-fn render_tabs(frame: &mut Frame, area: ratatui::layout::Rect, tab_titles: &[&str], selected: usize) {
+fn render_tabs(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    tab_titles: &[&str],
+    selected: usize,
+) {
     let tabs: Vec<_> = tab_titles.iter().map(|t| Span::raw(*t)).collect();
     let tabs_widget = Tabs::new(tabs)
         .block(

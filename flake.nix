@@ -51,5 +51,15 @@
 			checks = forAllSystems (system: {
 				default = self.packages.${system}.default;
 			});
+
+			devShells = forAllSystems (system:
+				let
+					pkgs = nixpkgs.legacyPackages.${system};
+				in {
+					default = pkgs.mkShell {
+						inputsFrom = [ self.packages.${system}.default ];
+						packages = [ pkgs.rustfmt ];
+					};
+				});
 		};
 }

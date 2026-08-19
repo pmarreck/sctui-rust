@@ -2,9 +2,7 @@ use reqwest::blocking::Client;
 
 use crate::auth::try_refresh_token;
 
-use super::super::utils::{
-    format_duration, format_playback_count, parse_next_href, parse_str, parse_u64,
-};
+use super::super::utils::{parse_next_href, parse_track};
 use crate::api::{API, Track, get_v2_json};
 
 impl API {
@@ -44,40 +42,7 @@ impl API {
                 let Some(track) = item.get("track").filter(|track| !track.is_null()) else {
                     continue;
                 };
-                let title = parse_str(track, "title");
-
-                let artists = parse_str(track, "metadata_artist");
-                let artists = if !artists.is_empty() {
-                    artists
-                } else {
-                    parse_str(
-                        track.get("user").unwrap_or(&serde_json::Value::Null),
-                        "username",
-                    )
-                };
-                let duration = format_duration(parse_u64(track, "duration"));
-                let duration_ms = parse_u64(track, "duration");
-
-                let playback_count = parse_u64(track, "playback_count");
-                let playback_count = format_playback_count(playback_count);
-
-                let artwork_url = parse_str(track, "artwork_url");
-
-                let stream_url = parse_str(track, "stream_url");
-                let access = parse_str(track, "access");
-                let track_urn = parse_str(track, "urn");
-
-                tracks.push(Track {
-                    title,
-                    artists,
-                    duration,
-                    duration_ms,
-                    playback_count,
-                    artwork_url,
-                    stream_url,
-                    access,
-                    track_urn,
-                });
+                tracks.push(parse_track(track));
             }
         }
 
@@ -132,7 +97,7 @@ mod tests {
                 let body = match request.url() {
                     "/me" => r#"{"id":9867108}"#,
                     "/users/9867108/track_likes?limit=40&linked_partitioning=true" => {
-                        r#"{"collection":[{"track":{"title":"Liked fixture","duration":184000,"urn":"soundcloud:tracks:404","access":"playable","user":{"username":"fixture artist"}}}]}"#
+                        r#"{"collection":[{"track":{"title":"Liked fixture","duration":184000,"urn":"soundcloud:tracks:404","access":"playable","user":{"username":"fixture artist"},"media":{"transcodings":[{"url":"https://resolver.example/hls","format":{"protocol":"hls","mime_type":"audio/mpeg"}}]}}}]}"#
                     }
                     _ => {
                         request.respond(Response::empty(403)).unwrap();
@@ -154,6 +119,7 @@ mod tests {
         assert_eq!(tracks.len(), 1);
         assert_eq!(tracks[0].title, "Liked fixture");
         assert_eq!(tracks[0].artists, "fixture artist");
+        assert_eq!(tracks[0].stream_url, "https://resolver.example/hls");
         assert_eq!(
             *observed.lock().unwrap(),
             vec![

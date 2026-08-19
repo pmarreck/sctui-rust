@@ -4,14 +4,17 @@ use crate::player::Player;
 
 use crate::tui::logic::state::{AppData, AppState};
 
+mod commands;
 mod helpers;
-mod quit;
-mod search;
-mod navigation;
+mod mouse;
 mod movement;
+mod navigation;
 mod playback;
 mod queue;
-mod commands;
+mod quit;
+mod search;
+
+pub(crate) use mouse::{ClickTracker, handle_mouse_event};
 
 pub enum InputOutcome {
     Continue,

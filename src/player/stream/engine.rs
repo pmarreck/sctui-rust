@@ -10,13 +10,38 @@ use url::Url;
 
 use crate::api::Track;
 use crate::auth::{Token, try_refresh_token};
-use crate::player::stream::cache::{CachedHls, SegmentCache, SEGMENT_CACHE_CAP};
-use crate::player::stream::hls::{HlsManifest, StreamsResponse};
+use crate::player::stream::cache::{CachedHls, SEGMENT_CACHE_CAP, SegmentCache};
 use crate::player::stream::downloader::spawn_segment_pump;
+use crate::player::stream::hls::{HlsManifest, StreamsResponse};
 use crate::player::stream::sample::TapSource;
 
 pub(crate) const CROSSFADE_DURATION: Duration = Duration::from_millis(35);
 const CROSSFADE_STEPS: usize = 7;
+
+fn resolve_transcoding_url(
+    client: &reqwest::blocking::Client,
+    resolver_url: &str,
+    access_token: &str,
+) -> anyhow::Result<Url> {
+    let response: serde_json::Value = client
+        .get(resolver_url)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            crate::auth::authorization_header(access_token),
+        )
+        .send()
+        .context("failed to resolve SoundCloud transcoding")?
+        .error_for_status()
+        .context("SoundCloud transcoding resolver returned error status")?
+        .json()
+        .context("failed to parse SoundCloud transcoding response")?;
+    let media_url = response
+        .get("url")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty())
+        .context("SoundCloud transcoding response contained no media URL")?;
+    Url::parse(media_url).context("invalid SoundCloud media URL")
+}
 
 pub(crate) fn open_output_stream() -> Arc<Mutex<OutputStream>> {
     let output_stream = OutputStreamBuilder::open_default_stream().unwrap();
@@ -56,7 +81,12 @@ impl PlaybackEngine {
         self.generation.load(Ordering::SeqCst)
     }
 
-    fn get_hls_url(&self, track_urn: &str, access_token: &str) -> anyhow::Result<Url> {
+    fn get_hls_url(&self, track: &Track, access_token: &str) -> anyhow::Result<Url> {
+        if !track.stream_url.is_empty() {
+            return resolve_transcoding_url(&self.client, &track.stream_url, access_token);
+        }
+
+        let track_urn = &track.track_urn;
         let streams_url = format!("https://api.soundcloud.com/tracks/{}/streams", track_urn);
         let streams_response: StreamsResponse = self
             .client
@@ -76,7 +106,9 @@ impl PlaybackEngine {
             .hls_aac_160_url
             .or(streams_response.hls_aac_96_url)
             .or(streams_response.hls_mp3_128_url)
-            .ok_or_else(|| anyhow::anyhow!("No HLS stream URL available (tried AAC 160, AAC 96, MP3 128)"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("No HLS stream URL available (tried AAC 160, AAC 96, MP3 128)")
+            })?;
 
         Url::parse(&hls_url).context("invalid HLS URL")
     }
@@ -100,7 +132,7 @@ impl PlaybackEngine {
         token: &Arc<Mutex<Token>>,
     ) -> anyhow::Result<(Arc<HlsManifest>, Arc<Vec<u8>>, Arc<Mutex<SegmentCache>>)> {
         let now = Instant::now();
-        
+
         if let Some(ref preload) = self.preload_next {
             if preload.track_urn == track.track_urn {
                 let preload = self.preload_next.take().unwrap();
@@ -113,14 +145,17 @@ impl PlaybackEngine {
                 ));
             }
         }
-        
-        let cache_valid = self.cache.as_ref().is_some_and(|c| c.is_valid_for(track, now));
+
+        let cache_valid = self
+            .cache
+            .as_ref()
+            .is_some_and(|c| c.is_valid_for(track, now));
 
         if !cache_valid {
             let _ = try_refresh_token(token);
             let access_token = { token.lock().unwrap().access_token.clone() };
 
-            let playlist_url = self.get_hls_url(&track.track_urn, &access_token)?;
+            let playlist_url = self.get_hls_url(track, &access_token)?;
             let manifest = HlsManifest::fetch(&self.client, &playlist_url, &access_token)?;
 
             let init_bytes = if let Some(init_url) = &manifest.init_url {
@@ -138,10 +173,7 @@ impl PlaybackEngine {
             });
         }
 
-        let cached = self
-            .cache
-            .as_ref()
-            .expect("cache must be set by now");
+        let cached = self.cache.as_ref().expect("cache must be set by now");
         Ok((
             Arc::clone(&cached.manifest),
             Arc::clone(&cached.init_bytes),
@@ -154,14 +186,18 @@ impl PlaybackEngine {
         track: &Track,
         token: &Arc<Mutex<Token>>,
     ) -> anyhow::Result<()> {
-        if self.preload_next.as_ref().is_some_and(|p| p.track_urn == track.track_urn) {
+        if self
+            .preload_next
+            .as_ref()
+            .is_some_and(|p| p.track_urn == track.track_urn)
+        {
             return Ok(());
         }
 
         let _ = try_refresh_token(token);
         let access_token = { token.lock().unwrap().access_token.clone() };
 
-        let playlist_url = self.get_hls_url(&track.track_urn, &access_token)?;
+        let playlist_url = self.get_hls_url(track, &access_token)?;
         let manifest = HlsManifest::fetch(&self.client, &playlist_url, &access_token)?;
 
         let init_bytes = if let Some(init_url) = &manifest.init_url {
@@ -177,9 +213,7 @@ impl PlaybackEngine {
                     cache.insert(0, Arc::new(bytes));
                     Some(Arc::new(Mutex::new(cache)))
                 }
-                Err(_) => {
-                    None
-                }
+                Err(_) => None,
             }
         } else {
             None
@@ -190,9 +224,8 @@ impl PlaybackEngine {
             fetched_at: Instant::now(),
             manifest: Arc::new(manifest),
             init_bytes,
-            segment_cache: first_segment_bytes.unwrap_or_else(|| {
-                Arc::new(Mutex::new(SegmentCache::new(SEGMENT_CACHE_CAP)))
-            }),
+            segment_cache: first_segment_bytes
+                .unwrap_or_else(|| Arc::new(Mutex::new(SegmentCache::new(SEGMENT_CACHE_CAP)))),
         });
 
         Ok(())
@@ -209,7 +242,7 @@ impl PlaybackEngine {
         last_start: &Arc<Mutex<Option<Instant>>>,
         current_track: &Arc<Mutex<Option<Track>>>,
         wave_buffer: &Arc<Mutex<std::collections::VecDeque<f32>>>,
-    ) {
+    ) -> anyhow::Result<()> {
         let old_track_urn = current_track
             .lock()
             .unwrap()
@@ -232,16 +265,14 @@ impl PlaybackEngine {
             }
         }
 
-        let (manifest, init_bytes, segment_cache) = match self.ensure_cached_hls(track, token) {
-            Ok(v) => v,
-            Err(_) => {
+        let (manifest, init_bytes, segment_cache) =
+            self.ensure_cached_hls(track, token).map_err(|error| {
                 if !is_seek {
                     is_playing_flag.store(false, Ordering::SeqCst);
                     *last_start.lock().unwrap() = None;
                 }
-                return;
-            }
-        };
+                error.context("failed to prepare track for playback")
+            })?;
 
         let (segment_index, offset_within_segment_ms) = manifest.locate_position(position_ms);
 
@@ -251,21 +282,19 @@ impl PlaybackEngine {
                 bytes
             } else {
                 drop(cache_guard);
-                match self.download_bytes(&manifest.segments[segment_index].url) {
-                    Ok(bytes) => {
-                        let arc = Arc::new(bytes);
-                        let mut cache_guard = segment_cache.lock().unwrap();
-                        cache_guard.insert(segment_index, Arc::clone(&arc));
-                        arc
-                    }
-                    Err(_) => {
+                let bytes = self
+                    .download_bytes(&manifest.segments[segment_index].url)
+                    .map_err(|error| {
                         if !is_seek {
                             is_playing_flag.store(false, Ordering::SeqCst);
                             *last_start.lock().unwrap() = None;
                         }
-                        return;
-                    }
-                }
+                        error.context("failed to download first media segment")
+                    })?;
+                let arc = Arc::new(bytes);
+                let mut cache_guard = segment_cache.lock().unwrap();
+                cache_guard.insert(segment_index, Arc::clone(&arc));
+                arc
             }
         };
 
@@ -278,18 +307,19 @@ impl PlaybackEngine {
 
         new_sink.set_volume(target_volume);
 
-        if append_segment_to_sink(
+        append_segment_to_sink(
             &new_sink,
             first_bytes,
             wave_buffer,
             offset_within_segment_ms,
-        ).is_err() {
+        )
+        .map_err(|error| {
             if !is_seek {
                 is_playing_flag.store(false, Ordering::SeqCst);
                 *last_start.lock().unwrap() = None;
             }
-            return;
-        }
+            error.context("failed to decode first media segment")
+        })?;
 
         let gen_for_pump = if is_seek {
             let generation_id = self.bump_generation();
@@ -331,6 +361,7 @@ impl PlaybackEngine {
             elapsed_time: Arc::clone(elapsed_time),
             last_start: Arc::clone(last_start),
         });
+        Ok(())
     }
 }
 
@@ -374,4 +405,103 @@ fn crossfade_and_stop(old_sink: Sink, target_volume: f32) {
     }
 
     old_sink.stop();
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+    use std::time::Duration;
+
+    use tiny_http::{Header, Response, Server};
+
+    use super::{Decoder, HlsManifest, combine_init_and_segment, resolve_transcoding_url};
+    use std::io::Cursor;
+
+    #[test]
+    fn transcoding_resolver_uses_browser_oauth_and_returns_signed_hls_url() {
+        let server = Server::http("127.0.0.1:0").unwrap();
+        let resolver_url = format!("http://{}/resolver", server.server_addr().to_ip().unwrap());
+        let observed_auth = Arc::new(Mutex::new(None));
+        let server_auth = Arc::clone(&observed_auth);
+        let responder = thread::spawn(move || {
+            let request = server
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .expect("resolver request");
+            *server_auth.lock().unwrap() = request
+                .headers()
+                .iter()
+                .find(|header| header.field.equiv("Authorization"))
+                .map(|header| header.value.as_str().to_string());
+            request
+                .respond(
+                    Response::from_string(r#"{"url":"https://cdn.example/signed.m3u8"}"#)
+                        .with_header(
+                            Header::from_bytes("Content-Type", "application/json").unwrap(),
+                        ),
+                )
+                .unwrap();
+        });
+
+        let client = reqwest::blocking::Client::new();
+        let resolved = resolve_transcoding_url(&client, &resolver_url, "browser-token").unwrap();
+        responder.join().unwrap();
+
+        assert_eq!(resolved.as_str(), "https://cdn.example/signed.m3u8");
+        assert_eq!(
+            *observed_auth.lock().unwrap(),
+            Some("OAuth browser-token".into())
+        );
+    }
+
+    #[test]
+    #[ignore = "uses Peter's live Firefox session and SoundCloud API"]
+    fn live_browser_session_prepares_a_decodable_liked_track_segment() {
+        let token = Arc::new(Mutex::new(crate::auth::initial_token().unwrap()));
+        let access_token = token.lock().unwrap().access_token.clone();
+        let track = crate::api::API::init(token)
+            .get_liked_tracks()
+            .unwrap()
+            .into_iter()
+            .find(|track| !track.stream_url.is_empty())
+            .expect("a liked track with a supported HLS transcoding");
+
+        let resolved = resolve_transcoding_url(
+            &reqwest::blocking::Client::new(),
+            &track.stream_url,
+            &access_token,
+        )
+        .unwrap();
+        assert!(matches!(resolved.scheme(), "http" | "https"));
+
+        let client = reqwest::blocking::Client::new();
+        let manifest = HlsManifest::fetch(&client, &resolved, &access_token).unwrap();
+        let init_bytes = manifest
+            .init_url
+            .as_ref()
+            .map(|url| {
+                client
+                    .get(url.as_str())
+                    .send()
+                    .unwrap()
+                    .error_for_status()
+                    .unwrap()
+                    .bytes()
+                    .unwrap()
+                    .to_vec()
+            })
+            .unwrap_or_default();
+        let segment_bytes = client
+            .get(manifest.segments[0].url.as_str())
+            .send()
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .bytes()
+            .unwrap();
+        let bytes = combine_init_and_segment(&init_bytes, &segment_bytes);
+        let decoded_samples = Decoder::new(Cursor::new(bytes)).unwrap().take(100).count();
+        assert_eq!(decoded_samples, 100);
+    }
 }

@@ -43,3 +43,15 @@
 - [x] Commit and push the personalized api-v2 route fix. (completed 2026-08-19 01:10 PM EDT)
   - Curiosity poke: confirm the pushed commit exactly matches the locally tested Nix output.
   - Result: implementation commit `e6b5f54` is present at both local `HEAD` and `origin/main` after an independent fetch.
+- [x] Reproduce and fix Enter-key playback so a selected playable track starts audio. (completed 2026-08-19 02:52 PM EDT)
+  - Curiosity poke: trace selection, queue state, stream resolution, and browser-session API compatibility separately so a swallowed playback error cannot look like an ignored key.
+  - Result: API-v2 HLS transcoding selection and resolution replace the Firefox-incompatible legacy streams route; the live Firefox check resolved a real liked track and decoded 100 samples from its first segment.
+- [x] Add deterministic mouse interaction for single-click selection, double-click playback, tab selection, and progress-bar seeking. (completed 2026-08-19 02:52 PM EDT)
+  - Curiosity poke: inject click timestamps and derive hit regions from layout state; Crossterm does not provide a portable double-click event.
+  - Result: shared render/hit regions cover every track pane, main/library/search tabs, scroll offsets, a 400 ms double-click window, and clamped single-flight seeks.
+- [x] Add a subdued italic shortcut/status line between the list and playback area, with playback errors rendered in red. (completed 2026-08-19 02:52 PM EDT)
+  - Curiosity poke: preserve useful content at narrow widths and let Peter visually approve rendered output before encoding snapshot assertions.
+  - Result: Peter approved the 80/120-column and scrolled views; deterministic assertions preserve the italic dark-gray shortcut marquee and bold red error replacement.
+- [x] Run the complete test and Nix checks, update documentation and `dirtree`, then ship the interaction work. (completed 2026-08-19 02:55 PM EDT)
+  - Curiosity poke: test mouse coordinates at region boundaries and ensure seeking cannot underflow, overflow, or divide by zero.
+  - Result: 31 deterministic tests pass, the opt-in live Firefox test prepares and decodes real HLS audio, all declared flake systems evaluate, and the hermetic x86_64-linux check builds `result/bin/sctui`.

@@ -12,6 +12,13 @@ use std::time::{Duration, Instant};
 use super::commands::PlayerCommand;
 use super::stream::{PlaybackEngine, open_output_stream};
 
+pub(crate) fn record_playback_result(
+    last_error: &Arc<Mutex<Option<String>>>,
+    result: anyhow::Result<()>,
+) {
+    *last_error.lock().unwrap() = result.err().map(|error| format!("{error:#}"));
+}
+
 pub(crate) fn player_loop(
     rx: Receiver<PlayerCommand>,
     token: Arc<Mutex<Token>>,
@@ -22,6 +29,7 @@ pub(crate) fn player_loop(
     last_start: Arc<Mutex<Option<Instant>>>,
     current_track: Arc<Mutex<Option<Track>>>,
     wave_buffer: Arc<Mutex<VecDeque<f32>>>,
+    last_error: Arc<Mutex<Option<String>>>,
 ) {
     let stream = open_output_stream();
     let mut engine = PlaybackEngine::new(Arc::clone(&stream)).unwrap();
@@ -29,7 +37,7 @@ pub(crate) fn player_loop(
     for msg in rx {
         match msg {
             PlayerCommand::Play(track) => {
-                engine.play_from_position(
+                let result = engine.play_from_position(
                     &track,
                     0,
                     &token,
@@ -40,10 +48,14 @@ pub(crate) fn player_loop(
                     &current_track,
                     &wave_buffer,
                 );
+                record_playback_result(&last_error, result);
             }
 
             PlayerCommand::PlayFromPosition(track, position_ms) => {
-                engine.play_from_position(
+                if is_seeking_flag.swap(true, Ordering::SeqCst) {
+                    continue;
+                }
+                let result = engine.play_from_position(
                     &track,
                     position_ms,
                     &token,
@@ -54,6 +66,8 @@ pub(crate) fn player_loop(
                     &current_track,
                     &wave_buffer,
                 );
+                record_playback_result(&last_error, result);
+                is_seeking_flag.store(false, Ordering::SeqCst);
             }
 
             PlayerCommand::PreloadNext(track) => {
@@ -132,7 +146,7 @@ pub(crate) fn player_loop(
                         *last_start.lock().unwrap() = None;
                     } else {
                         let new_position_ms = new_elapsed.as_millis() as u64;
-                        engine.play_from_position(
+                        let result = engine.play_from_position(
                             &track,
                             new_position_ms,
                             &token,
@@ -143,6 +157,7 @@ pub(crate) fn player_loop(
                             &current_track,
                             &wave_buffer,
                         );
+                        record_playback_result(&last_error, result);
                     }
                 }
                 is_seeking_flag.store(false, Ordering::SeqCst);
@@ -177,7 +192,7 @@ pub(crate) fn player_loop(
                     drop(elapsed);
 
                     let new_position_ms = new_elapsed.as_millis() as u64;
-                    engine.play_from_position(
+                    let result = engine.play_from_position(
                         &track,
                         new_position_ms,
                         &token,
@@ -188,9 +203,31 @@ pub(crate) fn player_loop(
                         &current_track,
                         &wave_buffer,
                     );
+                    record_playback_result(&last_error, result);
                 }
                 is_seeking_flag.store(false, Ordering::SeqCst);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::record_playback_result;
+
+    #[test]
+    fn playback_results_are_visible_and_a_success_clears_the_prior_error() {
+        let error = Arc::new(Mutex::new(None));
+
+        record_playback_result(&error, Err(anyhow::anyhow!("resolver returned 403")));
+        assert_eq!(
+            error.lock().unwrap().as_deref(),
+            Some("resolver returned 403")
+        );
+
+        record_playback_result(&error, Ok(()));
+        assert_eq!(*error.lock().unwrap(), None);
     }
 }

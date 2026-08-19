@@ -9,6 +9,7 @@ use ratatui::{
 use ratatui_image::{Resize, StatefulImage, thread::ThreadProtocol};
 
 use crate::api::Track;
+use crate::tui::layout::now_playing_progress_area;
 
 fn format_duration(duration_ms: u64) -> String {
     let duration_sec = duration_ms / 1000;
@@ -141,7 +142,7 @@ pub fn render_now_playing(
         .ratio(ratio)
         .label(label);
 
-    frame.render_widget(progress_bar, subsubchunks[5]);
+    frame.render_widget(progress_bar, now_playing_progress_area(area));
 
     let shuffle_indicator = if shuffle_enabled { "✔︎" } else { "×" };
     let repeat_indicator = if repeat_enabled { "✔︎" } else { "×" };
