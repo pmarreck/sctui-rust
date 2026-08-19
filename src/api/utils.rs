@@ -61,6 +61,46 @@ pub(crate) fn select_hls_transcoding_url(transcodings: &[serde_json::Value]) -> 
     None
 }
 
+/// Classifies service-policy and codec boundaries from the complete track
+/// response so dead legacy resolver URLs cannot hide known restrictions.
+fn classify_playback_restriction(
+    obj: &serde_json::Value,
+    transcodings: &[serde_json::Value],
+    stream_url: &str,
+) -> Option<crate::api::PlaybackRestriction> {
+    use crate::api::PlaybackRestriction;
+
+    let policy = parse_str(obj, "policy").to_ascii_uppercase();
+    let monetization = parse_str(obj, "monetization_model").to_ascii_uppercase();
+    if policy == "MONETIZE" && monetization == "SUB_HIGH_TIER" {
+        return Some(PlaybackRestriction::SoundCloudGoPlus);
+    }
+
+    match parse_str(obj, "access").to_ascii_lowercase().as_str() {
+        "blocked" => return Some(PlaybackRestriction::Blocked),
+        "preview" => return Some(PlaybackRestriction::PreviewOnly),
+        _ => {}
+    }
+
+    if stream_url.is_empty() {
+        let has_encrypted_stream = transcodings.iter().any(|transcoding| {
+            let protocol = transcoding
+                .get("format")
+                .map(|format| parse_str(format, "protocol"))
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            protocol.starts_with("cbc-") || protocol.starts_with("ctr-")
+        });
+        return Some(if has_encrypted_stream {
+            PlaybackRestriction::EncryptedStream
+        } else {
+            PlaybackRestriction::Unavailable
+        });
+    }
+
+    None
+}
+
 /// Converts SoundCloud track JSON into the shared UI model and retains its
 /// preferred API-v2 transcoding resolver for playback.
 pub(crate) fn parse_track(obj: &serde_json::Value) -> crate::api::Track {
@@ -74,12 +114,15 @@ pub(crate) fn parse_track(obj: &serde_json::Value) -> crate::api::Track {
         artists
     };
     let duration_ms = parse_u64(obj, "duration");
-    let stream_url = obj
+    let transcodings = obj
         .get("media")
         .and_then(|media| media.get("transcodings"))
         .and_then(|value| value.as_array())
-        .and_then(|values| select_hls_transcoding_url(values))
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let stream_url = select_hls_transcoding_url(transcodings)
         .unwrap_or_else(|| parse_str(obj, "stream_url"));
+    let playback_restriction = classify_playback_restriction(obj, transcodings, &stream_url);
 
     crate::api::Track {
         title: parse_str(obj, "title"),
@@ -90,6 +133,7 @@ pub(crate) fn parse_track(obj: &serde_json::Value) -> crate::api::Track {
         artwork_url: parse_str(obj, "artwork_url"),
         stream_url,
         access: parse_str(obj, "access"),
+        playback_restriction,
         track_urn: parse_str(obj, "urn"),
     }
 }
@@ -102,6 +146,8 @@ pub(crate) fn parse_next_href(resp: &serde_json::Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use crate::api::PlaybackRestriction;
+
     use super::{parse_track, select_hls_transcoding_url};
 
     #[test]
@@ -133,5 +179,64 @@ mod tests {
         }));
 
         assert_eq!(track.stream_url, "https://resolver/hls");
+    }
+
+    #[test]
+    fn playback_restrictions_classify_complete_track_sets() {
+        let cases = [
+            (
+                serde_json::json!({
+                    "access": null,
+                    "policy": "MONETIZE",
+                    "monetization_model": "SUB_HIGH_TIER",
+                    "media": {"transcodings": [
+                        {"url":"https://resolver/encrypted","format":{"protocol":"cbc-encrypted-hls","mime_type":"audio/mp4"}},
+                        {"url":"https://resolver/dead-legacy","format":{"protocol":"hls","mime_type":"audio/mpeg"}}
+                    ]}
+                }),
+                Some(PlaybackRestriction::SoundCloudGoPlus),
+            ),
+            (
+                serde_json::json!({"access":"blocked"}),
+                Some(PlaybackRestriction::Blocked),
+            ),
+            (
+                serde_json::json!({"access":"preview"}),
+                Some(PlaybackRestriction::PreviewOnly),
+            ),
+            (
+                serde_json::json!({
+                    "access":"playable",
+                    "media":{"transcodings":[
+                        {"url":"https://resolver/encrypted","format":{"protocol":"ctr-encrypted-hls","mime_type":"audio/mp4"}}
+                    ]}
+                }),
+                Some(PlaybackRestriction::EncryptedStream),
+            ),
+            (
+                serde_json::json!({
+                    "access":"playable",
+                    "media":{"transcodings":[
+                        {"url":"https://resolver/hls","format":{"protocol":"hls","mime_type":"audio/mpeg"}}
+                    ]}
+                }),
+                None,
+            ),
+            (
+                serde_json::json!({"access":"playable"}),
+                Some(PlaybackRestriction::Unavailable),
+            ),
+        ];
+
+        let observed = cases
+            .iter()
+            .map(|(value, _)| parse_track(value).playback_restriction)
+            .collect::<Vec<_>>();
+        let expected = cases
+            .iter()
+            .map(|(_, expected)| *expected)
+            .collect::<Vec<_>>();
+
+        assert_eq!(observed, expected);
     }
 }

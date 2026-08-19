@@ -6,7 +6,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-const SHORTCUTS: &str = "Esc Quit │ Tab Main tab │ ←/→ Section │ ↑/↓ Select │ Enter Play │ Space Pause │ ⇧←/→ Previous/next │ Alt←/→ Seek ±10s │ Alt↑/↓ Move ±10 │ ⇧↑/↓ Secondary │ ⇧J/K Tertiary │ ⇧U/D Volume │ ⇧S Shuffle │ ⇧R Repeat │ ⇧A Add queue │ ⇧N Play next │ ⇧L Like/follow │ ⇧V Visualizer │ ⇧F Find │ ⇧Q Queue │ ⇧H Help";
+const SHORTCUTS: &str = "Esc Quit │ Tab Main tab │ ←/→ Section │ ↑/↓ Select │ Enter Play │ Space Pause │ ⇧←/→ Previous/next │ Alt←/→ Seek ±10s │ Alt↑/↓ Move ±10 │ ⇧↑/↓ Secondary │ ⇧J/K Tertiary │ ⇧U/D Volume │ ⇧S Shuffle │ ⇧R Repeat │ ⇧A Add queue │ ⇧N Play next │ ⇧L Like/follow │ ⇧V Visualizer │ ⇧F Find │ ⇧Q Queue │ ⇧H Help │ PgUp/PgDn Page │ Wheel Select │ ⇧Wheel ±5 │ Search Enter Submit";
 const MARQUEE_GAP: &str = "     ";
 
 /// Produces a deterministic one-line window over the complete shortcut list.

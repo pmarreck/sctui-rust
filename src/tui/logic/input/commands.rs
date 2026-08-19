@@ -9,6 +9,26 @@ use crate::tui::logic::utils::{soundcloud_id_from_urn, soundcloud_playlist_id_fr
 
 use super::queue::{handle_add_to_queue, handle_add_next_to_queue};
 
+#[derive(Debug, PartialEq, Eq)]
+enum CharacterDestination {
+    SearchInput,
+    ShiftCommand,
+    LibraryCommand,
+    Ignore,
+}
+
+fn character_destination(selected_tab: usize, modifiers: KeyModifiers) -> CharacterDestination {
+    if selected_tab == 1 {
+        CharacterDestination::SearchInput
+    } else if modifiers.contains(KeyModifiers::SHIFT) {
+        CharacterDestination::ShiftCommand
+    } else if selected_tab == 0 {
+        CharacterDestination::LibraryCommand
+    } else {
+        CharacterDestination::Ignore
+    }
+}
+
 pub(crate) fn handle_char(
     key: KeyEvent,
     c: char,
@@ -16,21 +36,20 @@ pub(crate) fn handle_char(
     data: &mut AppData,
     player: &Player,
 ) -> InputOutcome {
-    if key.modifiers.contains(KeyModifiers::SHIFT) {
-        handle_shift_char(c, state, data, player)
-    } else if state.selected_tab == 0 {
-        handle_space(c, player)
-    } else if state.selected_tab == 1 {
-        handle_search_char(c, state)
-    } else {
-        InputOutcome::Continue
+    match character_destination(state.selected_tab, key.modifiers) {
+        CharacterDestination::SearchInput => handle_search_char(c, state),
+        CharacterDestination::ShiftCommand => handle_shift_char(c, state, data, player),
+        CharacterDestination::LibraryCommand => handle_space(c, player),
+        CharacterDestination::Ignore => InputOutcome::Continue,
     }
 }
 
 pub(crate) fn handle_backspace(state: &mut AppState) -> InputOutcome {
     if state.selected_tab == 1 {
+        invalidate_in_flight_search(state);
         state.query.pop();
-        state.search_needs_fetch = true;
+        state.search_needs_fetch = false;
+        state.search_input_focused = true;
         state.selected_row = 0;
         state.search_selected_playlist_track_row = 0;
         state.search_selected_album_track_row = 0;
@@ -355,8 +374,10 @@ fn handle_space(c: char, player: &Player) -> InputOutcome {
 }
 
 fn handle_search_char(c: char, state: &mut AppState) -> InputOutcome {
+    invalidate_in_flight_search(state);
     state.query.push(c);
-    state.search_needs_fetch = true;
+    state.search_needs_fetch = false;
+    state.search_input_focused = true;
     state.selected_row = 0;
     state.search_selected_playlist_track_row = 0;
     state.search_selected_album_track_row = 0;
@@ -364,4 +385,84 @@ fn handle_search_char(c: char, state: &mut AppState) -> InputOutcome {
     state.search_selected_person_like_row = 0;
     state.search_people_tracks_focus = FollowingTracksFocus::Published;
     InputOutcome::Continue
+}
+
+/// Prevents an older query or nested result from replacing results after input changes.
+fn invalidate_in_flight_search(state: &mut AppState) {
+    for task in [
+        state.search_results_task.take(),
+        state.search_playlist_tracks_task.take(),
+        state.search_album_tracks_task.take(),
+        state.search_people_tracks_task.take(),
+        state.search_people_likes_task.take(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        task.abort();
+    }
+    state.search_results_request_id = state.search_results_request_id.wrapping_add(1);
+    state.search_playlist_tracks_request_id =
+        state.search_playlist_tracks_request_id.wrapping_add(1);
+    state.search_album_tracks_request_id = state.search_album_tracks_request_id.wrapping_add(1);
+    state.search_people_tracks_request_id =
+        state.search_people_tracks_request_id.wrapping_add(1);
+    state.search_people_likes_request_id =
+        state.search_people_likes_request_id.wrapping_add(1);
+}
+
+/// Submits the focused search field while keeping later Enter presses available for playback.
+pub(crate) fn handle_search_submit(state: &mut AppState) -> bool {
+    if state.selected_tab != 1 || !state.search_input_focused {
+        return false;
+    }
+    if !state.query.trim().is_empty() {
+        state.search_needs_fetch = true;
+        state.search_input_focused = false;
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::tui::logic::state::AppState;
+
+    use ratatui::crossterm::event::KeyModifiers;
+
+    use super::{CharacterDestination, character_destination, handle_search_char, handle_search_submit};
+
+    #[test]
+    fn shifted_characters_still_belong_to_search_input() {
+        assert_eq!(
+            character_destination(1, KeyModifiers::SHIFT),
+            CharacterDestination::SearchInput
+        );
+        assert_eq!(
+            character_destination(0, KeyModifiers::SHIFT),
+            CharacterDestination::ShiftCommand
+        );
+    }
+
+    #[test]
+    fn search_editing_waits_for_enter_then_submits_once() {
+        let mut state = AppState::new();
+        state.selected_tab = 1;
+        state.search_input_focused = true;
+
+        handle_search_char('x', &mut state);
+        assert_eq!(state.query, "x");
+        assert!(!state.search_needs_fetch);
+        assert!(state.search_input_focused);
+        assert_eq!(state.search_results_request_id, 1);
+        assert_eq!(state.search_playlist_tracks_request_id, 1);
+        assert_eq!(state.search_album_tracks_request_id, 1);
+        assert_eq!(state.search_people_tracks_request_id, 1);
+        assert_eq!(state.search_people_likes_request_id, 1);
+
+        assert!(handle_search_submit(&mut state));
+        assert!(state.search_needs_fetch);
+        assert!(!state.search_input_focused);
+
+        assert!(!handle_search_submit(&mut state));
+    }
 }

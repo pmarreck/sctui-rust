@@ -250,6 +250,7 @@ fn handle_normal_up(_key: KeyEvent, state: &mut AppState, data: &mut AppData) {
 }
 
 fn handle_search_down(key: KeyEvent, state: &mut AppState, data: &mut AppData) {
+    state.search_input_focused = false;
     match state.selected_searchfilter {
         0 => {
             let max_rows = data.search_tracks.len();
@@ -329,6 +330,7 @@ fn handle_search_down(key: KeyEvent, state: &mut AppState, data: &mut AppData) {
 }
 
 fn handle_search_up(key: KeyEvent, state: &mut AppState, data: &mut AppData) {
+    state.search_input_focused = false;
     match state.selected_searchfilter {
         0 => {
             if key.modifiers.contains(KeyModifiers::ALT) {

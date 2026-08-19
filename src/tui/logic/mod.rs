@@ -1088,6 +1088,7 @@ fn start(
                 state.selected_following_like_row,
                 state.following_tracks_focus == FollowingTracksFocus::Likes,
                 &state.query,
+                state.search_input_focused,
                 &SEARCHFILTERS,
                 state.selected_searchfilter,
                 state.search_selected_playlist_track_row,
@@ -1127,8 +1128,15 @@ fn start(
         while event::poll(Duration::from_millis(10))? {
             match event::read()? {
                 Event::Key(key) => {
+                    let size = terminal.size()?;
                     if let InputOutcome::Quit =
-                        handle_key_event(key, &mut state, &mut data, &player)
+                        handle_key_event(
+                            key,
+                            Rect::new(0, 0, size.width, size.height),
+                            &mut state,
+                            &mut data,
+                            &player,
+                        )
                     {
                         return Ok(());
                     }
@@ -1412,6 +1420,7 @@ fn start(
                     state.selected_following_like_row,
                     state.following_tracks_focus == FollowingTracksFocus::Likes,
                     &state.query,
+                    state.search_input_focused,
                     &SEARCHFILTERS,
                     state.selected_searchfilter,
                     state.search_selected_playlist_track_row,

@@ -1,5 +1,34 @@
 use chrono::{DateTime, FixedOffset};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaybackRestriction {
+    SoundCloudGoPlus,
+    PreviewOnly,
+    Blocked,
+    EncryptedStream,
+    Unavailable,
+}
+
+impl PlaybackRestriction {
+    /// Explains the strongest policy evidence supplied with a track without
+    /// presenting SoundCloud's deliberately masked resolver status as a missing file.
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::SoundCloudGoPlus => {
+                "SoundCloud Go+ track requires encrypted high-tier playback, which sctui does not support"
+            }
+            Self::PreviewOnly => "SoundCloud permits only preview playback for this track",
+            Self::Blocked => {
+                "SoundCloud reports this track as blocked by creator, paywall, or region policy"
+            }
+            Self::EncryptedStream => {
+                "SoundCloud supplied only encrypted streams, which sctui does not support"
+            }
+            Self::Unavailable => "SoundCloud supplied no playable stream for this track",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Track {
     pub title: String,
@@ -10,12 +39,14 @@ pub struct Track {
     pub artwork_url: String,
     pub stream_url: String,
     pub access: String,
+    pub playback_restriction: Option<PlaybackRestriction>,
     pub track_urn: String,
 }
 
 impl Track {
     pub fn is_playable(&self) -> bool {
-        self.access.is_empty() || self.access == "playable"
+        self.playback_restriction.is_none()
+            && (self.access.is_empty() || self.access == "playable")
     }
 }
 

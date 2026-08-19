@@ -504,4 +504,26 @@ mod tests {
         let decoded_samples = Decoder::new(Cursor::new(bytes)).unwrap().take(100).count();
         assert_eq!(decoded_samples, 100);
     }
+
+    #[test]
+    #[ignore = "uses Peter's live Firefox session and SoundCloud library"]
+    fn live_go_plus_track_is_classified_before_its_dead_legacy_resolver() {
+        let token = Arc::new(Mutex::new(crate::auth::initial_token().unwrap()));
+        let mut api = crate::api::API::init(Arc::clone(&token));
+        let track = api
+            .get_liked_tracks()
+            .unwrap()
+            .into_iter()
+            .find(|track| {
+                track.playback_restriction
+                    == Some(crate::api::PlaybackRestriction::SoundCloudGoPlus)
+            })
+            .expect("current liked-track page contains a Go+ track");
+
+        assert_eq!(
+            track.playback_restriction,
+            Some(crate::api::PlaybackRestriction::SoundCloudGoPlus)
+        );
+        assert!(!track.is_playable());
+    }
 }

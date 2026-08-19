@@ -18,7 +18,7 @@ Firefox fallback supports standard Firefox, Snap Firefox, and Flatpak Firefox pr
 
 SoundCloud rejects browser-session tokens on several legacy `api.soundcloud.com/me/*` routes. For Firefox sessions, `sctui` resolves the signed-in user through api-v2 and uses its user-scoped likes, library, and following collections.
 
-Playback likewise uses the API-v2 transcoding metadata returned with each track. Playback failures are shown in red in the status line instead of being discarded by the audio worker.
+Playback likewise uses the API-v2 transcoding metadata returned with each track. Playback failures are shown in red in the status line instead of being discarded by the audio worker. When SoundCloud marks a track as Go+ high-tier content, `sctui` reports that its encrypted playback is unsupported instead of displaying the 404 from SoundCloud's obsolete fallback resolver.
 
 ## Controls
 
@@ -27,8 +27,12 @@ The italic status line between the active list and player shows every keyboard s
 Mouse controls are also available:
 
 - Click a main tab, library section, or search filter to select it.
+- Click a playlist, album, or followed person to load its tracks.
 - Click a track once to select it and twice within 400 ms to play it.
+- Scroll the mouse wheel over the content to move track selection by one; hold Shift to move by five.
 - Click the playback progress bar to restart the current track at that position.
+
+`Page Up` and `Page Down` move track selection by one visible page. On the Search tab, typing focuses the visible input cursor, Enter submits the query, and navigation moves focus to the results so Enter can play the selected track.
 
 ## Build and test
 

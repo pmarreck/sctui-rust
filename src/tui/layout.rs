@@ -15,6 +15,13 @@ pub(crate) enum TrackTarget {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CollectionTarget {
+    Playlist,
+    Album,
+    Following,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct RootRegions {
     pub tabs: Rect,
     pub content: Rect,
@@ -40,11 +47,7 @@ pub(crate) fn root_regions(area: Rect) -> RootRegions {
     }
 }
 
-pub(crate) fn library_track_regions(
-    area: Rect,
-    selected_subtab: usize,
-    search_popup_visible: bool,
-) -> Vec<(TrackTarget, Rect)> {
+fn library_table_area(area: Rect, search_popup_visible: bool) -> Rect {
     let subchunks = if search_popup_visible {
         Layout::default()
             .direction(Direction::Vertical)
@@ -60,7 +63,15 @@ pub(crate) fn library_track_regions(
             .constraints([Constraint::Length(3), Constraint::Min(0)])
             .split(area)
     };
-    let table_area = subchunks[if search_popup_visible { 2 } else { 1 }];
+    subchunks[if search_popup_visible { 2 } else { 1 }]
+}
+
+pub(crate) fn library_track_regions(
+    area: Rect,
+    selected_subtab: usize,
+    search_popup_visible: bool,
+) -> Vec<(TrackTarget, Rect)> {
+    let table_area = library_table_area(area, search_popup_visible);
 
     match selected_subtab {
         0 => vec![(TrackTarget::Likes, table_area)],
@@ -93,6 +104,42 @@ pub(crate) fn library_track_regions(
             ]
         }
         _ => Vec::new(),
+    }
+}
+
+pub(crate) fn library_collection_region(
+    area: Rect,
+    selected_subtab: usize,
+    search_popup_visible: bool,
+) -> Option<(CollectionTarget, Rect)> {
+    let table_area = library_table_area(area, search_popup_visible);
+    match selected_subtab {
+        1 => {
+            let columns = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(33), Constraint::Percentage(67)])
+                .split(table_area);
+            Some((CollectionTarget::Playlist, columns[0]))
+        }
+        2 => {
+            let columns = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
+                .split(table_area);
+            Some((CollectionTarget::Album, columns[0]))
+        }
+        3 => {
+            let columns = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(20),
+                    Constraint::Percentage(40),
+                    Constraint::Percentage(40),
+                ])
+                .split(table_area);
+            Some((CollectionTarget::Following, columns[0]))
+        }
+        _ => None,
     }
 }
 
@@ -151,6 +198,10 @@ pub(crate) fn table_row_at(area: Rect, y: u16, offset: usize, len: usize) -> Opt
     }
     let row = offset.saturating_add(usize::from(y - first_row));
     (row < len).then_some(row)
+}
+
+pub(crate) fn visible_table_rows(area: Rect) -> usize {
+    usize::from(area.height.saturating_sub(3))
 }
 
 pub(crate) fn seek_position_ms(area: Rect, x: u16, duration_ms: u64) -> Option<u64> {
@@ -239,8 +290,9 @@ mod tests {
     use ratatui::layout::Rect;
 
     use super::{
-        TrackTarget, equal_tab_at_x, library_track_regions, root_regions, seek_position_ms,
-        tab_at_x, table_row_at,
+        CollectionTarget, TrackTarget, equal_tab_at_x, library_collection_region,
+        library_track_regions, root_regions, seek_position_ms, tab_at_x, table_row_at,
+        visible_table_rows,
     };
 
     #[test]
@@ -264,6 +316,25 @@ mod tests {
     }
 
     #[test]
+    fn library_collection_hit_regions_match_each_rendered_left_pane() {
+        let area = Rect::new(0, 3, 120, 29);
+
+        assert_eq!(
+            library_collection_region(area, 1, false),
+            Some((CollectionTarget::Playlist, Rect::new(0, 6, 40, 26)))
+        );
+        assert_eq!(
+            library_collection_region(area, 2, false),
+            Some((CollectionTarget::Album, Rect::new(0, 6, 78, 26)))
+        );
+        assert_eq!(
+            library_collection_region(area, 3, false),
+            Some((CollectionTarget::Following, Rect::new(0, 6, 24, 26)))
+        );
+        assert_eq!(library_collection_region(area, 0, false), None);
+    }
+
+    #[test]
     fn table_rows_exclude_border_and_header_and_include_scroll_offset() {
         let area = Rect::new(10, 6, 50, 8);
 
@@ -271,6 +342,12 @@ mod tests {
         assert_eq!(table_row_at(area, 8, 20, 100), Some(20));
         assert_eq!(table_row_at(area, 12, 20, 100), Some(24));
         assert_eq!(table_row_at(area, 13, 20, 100), None);
+    }
+
+    #[test]
+    fn visible_rows_exclude_table_borders_and_header() {
+        assert_eq!(visible_table_rows(Rect::new(0, 0, 80, 26)), 23);
+        assert_eq!(visible_table_rows(Rect::new(0, 0, 80, 2)), 0);
     }
 
     #[test]

@@ -13,11 +13,28 @@ use crate::tui::render::utils::{calculate_min_widths, styled_header, truncate_wi
 
 const NUM_SEARCHFILTERS: usize = 4;
 
+/// Places the terminal cursor after centered input without crossing the field border.
+fn search_cursor_position(area: Rect, query: &str) -> Option<(u16, u16)> {
+    if area.width < 3 || area.height < 3 {
+        return None;
+    }
+    let inner_x = area.x.saturating_add(1);
+    let inner_width = area.width.saturating_sub(2);
+    let query_width = Span::raw(query).width().min(inner_width as usize) as u16;
+    let start = inner_x.saturating_add(inner_width.saturating_sub(query_width) / 2);
+    let rightmost = inner_x.saturating_add(inner_width.saturating_sub(1));
+    Some((
+        start.saturating_add(query_width).min(rightmost),
+        area.y.saturating_add(1),
+    ))
+}
+
 pub fn render_search(
     frame: &mut Frame,
     area: Rect,
     width: usize,
     query: &str,
+    input_focused: bool,
     searchfilters: &[&str],
     selected_searchfilter: usize,
     selected_row: usize,
@@ -69,6 +86,11 @@ pub fn render_search(
         )
         .alignment(Alignment::Center);
     frame.render_widget(input, subchunks[0]);
+    if input_focused {
+        if let Some(position) = search_cursor_position(subchunks[0], query) {
+            frame.set_cursor_position(position);
+        }
+    }
 
     let table_area = subchunks[1];
 
@@ -485,4 +507,35 @@ pub fn render_search(
                 .add_modifier(Modifier::BOLD),
         );
     frame.render_widget(searchfilter_widget, subchunks[2]);
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::layout::Rect;
+
+    use super::search_cursor_position;
+
+    #[test]
+    fn search_cursor_tracks_the_end_of_centered_input_and_stays_inside_its_border() {
+        let area = Rect::new(10, 5, 20, 3);
+        let cases = [
+            ("", (20, 6)),
+            ("rust", (22, 6)),
+            ("音", (21, 6)),
+            ("123456789012345678", (28, 6)),
+        ];
+
+        let observed = cases
+            .iter()
+            .map(|(query, _)| search_cursor_position(area, query))
+            .collect::<Vec<_>>();
+        let expected = cases
+            .iter()
+            .map(|(_, expected)| Some(*expected))
+            .collect::<Vec<_>>();
+
+        assert_eq!(observed, expected);
+        assert_eq!(search_cursor_position(Rect::new(0, 0, 2, 3), "x"), None);
+        assert_eq!(search_cursor_position(Rect::new(0, 0, 20, 2), "x"), None);
+    }
 }

@@ -1,4 +1,5 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::layout::Rect;
 
 use crate::player::Player;
 
@@ -23,6 +24,7 @@ pub enum InputOutcome {
 
 pub fn handle_key_event(
     key: KeyEvent,
+    area: Rect,
     state: &mut AppState,
     data: &mut AppData,
     player: &Player,
@@ -57,9 +59,33 @@ pub fn handle_key_event(
         KeyCode::Left => navigation::handle_left_key(key, state, data, player),
         KeyCode::Down => movement::handle_down_key(key, state, data),
         KeyCode::Up => movement::handle_up_key(key, state, data),
+        KeyCode::PageDown => {
+            if let Some(target) = mouse::active_track_target(state) {
+                let distance = mouse::active_track_page_rows(area, state);
+                if distance > 0 {
+                    mouse::move_track_selection(target, distance as isize, state, data);
+                }
+            }
+            InputOutcome::Continue
+        }
+        KeyCode::PageUp => {
+            if let Some(target) = mouse::active_track_target(state) {
+                let distance = mouse::active_track_page_rows(area, state);
+                if distance > 0 {
+                    mouse::move_track_selection(target, -(distance as isize), state, data);
+                }
+            }
+            InputOutcome::Continue
+        }
         KeyCode::Char(c) => commands::handle_char(key, c, state, data, player),
         KeyCode::Backspace => commands::handle_backspace(state),
-        KeyCode::Enter => playback::handle_enter(state, data, player),
+        KeyCode::Enter => {
+            if commands::handle_search_submit(state) {
+                InputOutcome::Continue
+            } else {
+                playback::handle_enter(state, data, player)
+            }
+        }
         _ => InputOutcome::Continue,
     }
 }

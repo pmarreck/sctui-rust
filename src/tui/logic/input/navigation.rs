@@ -8,6 +8,7 @@ use crate::tui::logic::utils::{build_queue, build_search_matches};
 pub(crate) fn handle_tab_switch(state: &mut AppState) -> InputOutcome {
     state.selected_tab = (state.selected_tab + 1) % 3;
     state.selected_row = 0;
+    state.search_input_focused = state.selected_tab == 1;
     InputOutcome::Continue
 }
 
@@ -79,7 +80,7 @@ pub(crate) fn handle_right_key(
         state.search_selected_person_track_row = 0;
         state.search_selected_person_like_row = 0;
         state.search_people_tracks_focus = FollowingTracksFocus::Published;
-        state.search_needs_fetch = true;
+        state.search_needs_fetch = !state.search_input_focused;
         data.search_tracks_state.select(Some(0));
         data.search_albums_state.select(Some(0));
         data.search_playlists_state.select(Some(0));
@@ -167,7 +168,7 @@ pub(crate) fn handle_left_key(
         state.search_selected_person_track_row = 0;
         state.search_selected_person_like_row = 0;
         state.search_people_tracks_focus = FollowingTracksFocus::Published;
-        state.search_needs_fetch = true;
+        state.search_needs_fetch = !state.search_input_focused;
         data.search_tracks_state.select(Some(0));
         data.search_albums_state.select(Some(0));
         data.search_playlists_state.select(Some(0));

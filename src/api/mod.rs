@@ -18,7 +18,7 @@ pub use calls::playlists::fetch_playlist_tracks;
 pub use calls::search::{
     fetch_search_albums, fetch_search_people, fetch_search_playlists, fetch_search_tracks,
 };
-pub use models::{Album, Artist, Playlist, Track};
+pub use models::{Album, Artist, PlaybackRestriction, Playlist, Track};
 
 pub struct API {
     token: Arc<Mutex<Token>>,

@@ -39,6 +39,7 @@ fn handle_search_tracks_enter(state: &mut AppState, data: &mut AppData, player: 
         None => return,
     };
     if !track.is_playable() {
+        player.play(track.clone());
         return;
     }
 
@@ -69,6 +70,7 @@ fn handle_search_playlist_enter(state: &mut AppState, data: &mut AppData, player
         None => return,
     };
     if !track.is_playable() {
+        player.play(track.clone());
         return;
     }
 
@@ -99,6 +101,7 @@ fn handle_search_album_enter(state: &mut AppState, data: &mut AppData, player: &
         None => return,
     };
     if !track.is_playable() {
+        player.play(track.clone());
         return;
     }
 
@@ -145,6 +148,7 @@ fn handle_search_people_enter(state: &mut AppState, data: &mut AppData, player: 
         None => return,
     };
     if !track.is_playable() {
+        player.play(track.clone());
         return;
     }
 
@@ -182,6 +186,7 @@ fn handle_likes_enter(
     if let Some(selected_idx) = selected_idx {
         if let Some(track) = data.likes.get(selected_idx) {
             if !track.is_playable() {
+                player.play(track.clone());
                 return;
             }
             if state.playback_source != PlaybackSource::Likes {
@@ -230,6 +235,7 @@ fn handle_playlist_enter(
             None => return,
         };
         if !track.is_playable() {
+            player.play(track.clone());
             return;
         }
         if state.playback_source != PlaybackSource::Playlist {
@@ -266,6 +272,7 @@ fn handle_album_enter(
 ) {
     if let Some(track) = data.album_tracks.get(state.selected_album_track_row) {
         if !track.is_playable() {
+            player.play(track.clone());
             return;
         }
         if state.playback_source != PlaybackSource::Album {
@@ -318,6 +325,7 @@ fn handle_following_enter(
         };
     if let Some(track) = tracks.get(selected_idx) {
         if !track.is_playable() {
+            player.play(track.clone());
             return;
         }
         if state.playback_source != new_source {

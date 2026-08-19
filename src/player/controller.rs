@@ -13,6 +13,12 @@ use std::time::{Duration, Instant};
 use super::commands::PlayerCommand;
 use super::worker::player_loop;
 
+fn playback_restriction_message(track: &Track) -> Option<String> {
+    track
+        .playback_restriction
+        .map(|restriction| restriction.message().to_string())
+}
+
 pub struct Player {
     tx: Sender<PlayerCommand>,
     is_playing_flag: Arc<AtomicBool>,
@@ -78,6 +84,10 @@ impl Player {
     }
 
     pub fn play(&self, track: Track) {
+        if let Some(message) = playback_restriction_message(&track) {
+            *self.last_error.lock().unwrap() = Some(message);
+            return;
+        }
         let _ = self.tx.send(PlayerCommand::Play(track));
     }
 
@@ -165,6 +175,7 @@ impl Player {
                 artwork_url: "".to_string(),
                 stream_url: "".to_string(),
                 access: "playable".to_string(),
+                playback_restriction: None,
                 track_urn: "".to_string(),
             })
     }
@@ -179,5 +190,35 @@ impl Player {
 
     pub fn wave_buffer(&self) -> Arc<Mutex<VecDeque<f32>>> {
         Arc::clone(&self.wave_buffer)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::api::{PlaybackRestriction, Track};
+
+    use super::playback_restriction_message;
+
+    #[test]
+    fn playback_request_reports_service_policy_before_starting_the_worker() {
+        let track = Track {
+            title: "Restricted fixture".into(),
+            artists: "Fixture".into(),
+            duration: "03:00".into(),
+            duration_ms: 180_000,
+            playback_count: "1".into(),
+            artwork_url: String::new(),
+            stream_url: "https://resolver/dead-legacy".into(),
+            access: String::new(),
+            playback_restriction: Some(PlaybackRestriction::SoundCloudGoPlus),
+            track_urn: "soundcloud:tracks:1".into(),
+        };
+
+        assert_eq!(
+            playback_restriction_message(&track).as_deref(),
+            Some(
+                "SoundCloud Go+ track requires encrypted high-tier playback, which sctui does not support"
+            )
+        );
     }
 }

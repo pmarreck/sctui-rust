@@ -55,3 +55,28 @@
 - [x] Run the complete test and Nix checks, update documentation and `dirtree`, then ship the interaction work. (completed 2026-08-19 02:55 PM EDT)
   - Curiosity poke: test mouse coordinates at region boundaries and ensure seeking cannot underflow, overflow, or divide by zero.
   - Result: 31 deterministic tests pass, the opt-in live Firefox test prepares and decodes real HLS audio, all declared flake systems evaluate, and the hermetic x86_64-linux check builds `result/bin/sctui`.
+- [x] Reproduce the visible track-playback 404 and classify the actual SoundCloud restriction in a deterministic failing test. (completed 2026-08-19 04:33 PM EDT)
+  - Curiosity poke: distinguish SoundCloud Go+ subscription policy, regional availability, DRM, deleted media, and an expired signed URL without exposing Peter's track or credential data.
+  - Result: the reported track is `MONETIZE` / `SUB_HIGH_TIER` Go+ content with encrypted HLS; SoundCloud's obsolete unencrypted resolver masks that policy boundary with an empty 404.
+- [x] Report precise playback failure reasons in the status line when SoundCloud supplies enough evidence. (completed 2026-08-19 04:33 PM EDT)
+  - Curiosity poke: retain the original HTTP status and endpoint when the service gives no trustworthy policy reason.
+  - Result: parsed access, monetization, and available stream protocols now classify Go+, preview-only, blocked, encrypted-only, and unavailable tracks before the player worker starts.
+- [x] Add Page Up/Page Down view navigation. (completed 2026-08-19 04:33 PM EDT)
+  - Curiosity poke: define page size from the visible data rows and clamp short or empty lists.
+  - Result: each key moves the active track selector by the rendered pane's visible data-row count, clamped to the list.
+- [x] Add mouse-wheel selection by one row and Shift-wheel selection by five rows. (completed 2026-08-19 04:33 PM EDT)
+  - Curiosity poke: keep wheel input selection-only and preserve the active pane's table offset at boundaries.
+  - Result: wheel movement is selection-only, uses the active track pane, and clamps empty and boundary cases.
+- [x] Make existing click, double-click, and seek behavior work throughout Playlists, Albums, and Following. (completed 2026-08-19 04:33 PM EDT)
+  - Curiosity poke: test actual nested-pane layouts and empty/loading states rather than assuming all library tabs share Likes geometry.
+  - Result: left-pane collection clicks now select playlists, albums, and followed people using the same layout geometry that renders them; their right track panes retain single-click and double-click behavior.
+- [x] Make Enter submit Search and render a visible insertion point while editing. (completed 2026-08-19 04:33 PM EDT)
+  - Curiosity poke: prevent Enter from falling through to track playback after results appear, and show the cursor at empty, middle, and end positions.
+  - Result: edits wait for Enter, submission transfers focus to results, and the native terminal cursor tracks centered UTF-8 input without crossing the border.
+- [ ] Provision the signed `pmarreck/sctui-rust` Mechatron webhook and verify the next exact pushed commit.
+  - Curiosity poke: run the all-owner dry run first and keep the HMAC secret out of arguments, logs, repository files, and chat.
+- [ ] Run the complete Cargo and Nix gates, update documentation and `dirtree`, then commit and push the passing unit.
+  - Curiosity poke: preserve the live-only playback test as an explicit extra check and report any remaining physical TUI uncertainty.
+  - Current state: 41 deterministic tests, both opt-in live Firefox checks, and `checks.x86_64-linux.default` pass. Physical visual approval remains for the appended shortcut hints and live cursor.
+
+Future testing note: Peter and Einstein are preparing a libghostty-based terminal emulator path that should provide better objective TUI interaction tests than tmux. It is intentionally outside this work unit until its interface is ready.
