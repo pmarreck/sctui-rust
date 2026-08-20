@@ -111,6 +111,7 @@
   - Result: the live regression reproduced the legacy-origin 403; every filter now uses its api-v2 resource, api-v2 album discriminators are shared with the Library, and all four result types return live data.
 - [x] Run the complete deterministic, live Firefox, Nix test, and release-build gates for Search. (completed 2026-08-20 11:10 AM EDT)
   - Result: 52 deterministic tests, all 5 live Firefox checks, `./test`, and `./build` pass.
-- [ ] Commit the passing Search, album-classifier, live-playback-check, documentation, and PLAN unit.
+- [x] Commit the passing Search, album-classifier, live-playback-check, documentation, and PLAN unit. (completed 2026-08-20 11:11 AM EDT)
+  - Result: implementation commit `893b0fc` is locally recorded on `main`; webhook provisioning, push, and exact Mechatron verification remain pending.
 
 Future testing note: Peter and Einstein are preparing a libghostty-based terminal emulator path that should provide better objective TUI interaction tests than tmux. It is intentionally outside this work unit until its interface is ready.
