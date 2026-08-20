@@ -1,6 +1,6 @@
 use crate::auth::Token;
 
-use super::super::utils::{format_duration, parse_str, parse_u64, playlist_tracks_uri};
+use super::super::utils::{format_duration, is_album, parse_str, parse_u64, playlist_tracks_uri};
 use crate::api::{API, Album, Track};
 use crate::api::calls::playlists::fetch_playlist_tracks;
 use std::sync::{Arc, Mutex};
@@ -17,7 +17,7 @@ impl API {
             let Some(album) = item.get("playlist").filter(|value| !value.is_null()) else {
                 continue;
             };
-            if !parse_str(album, "playlist_type").eq_ignore_ascii_case("album") {
+            if !is_album(album) {
                 continue;
             }
 

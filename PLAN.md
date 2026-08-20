@@ -100,5 +100,17 @@
   - Result: 50 deterministic tests and all 4 opt-in live Firefox checks pass; `./test` and `./build` pass, and `bin/sctui` resolves to the new Nix store executable.
 - [x] Commit the passing nested-library interaction and retained-error unit. (completed 2026-08-19 06:12 PM EDT)
   - Result: implementation commit `ca5f1dd` is locally recorded on `main` with all deterministic, live Firefox, Nix test, and release-build gates passing.
+- [ ] Diagnose the Mechatron badge 404, provision the signed webhook with explicit approval, push `main`, and verify the exact commit reaches `PASSING`.
+  - Curiosity poke: distinguish correct badge Markdown from a missing first accepted build; verify queue admission rather than trusting GitHub's webhook HTTP status.
+  - Finding: the canonical badge and flake target are correct, but the public endpoint is 404, GitHub has no repository webhook, and Mechatron has no queued or completed run; privileged provisioning awaits Peter's explicit approval.
+- [x] Determine from upstream Git history which tests existed before the fork work and whether upstream actually ran them. (completed 2026-08-20 11:10 AM EDT)
+  - Curiosity poke: separate test functions from a complete test entry point and compare the fork point rather than today's tree.
+  - Result: upstream CI invoked `cargo test --all-features --all-targets` on macOS and Windows, but the fork point contained zero test files and zero test functions; this fork introduced its first 14 tests in `cba90c7`.
+- [x] Reproduce Search returning no results with a deterministic failing test, repair the API or state boundary, and verify against the live Firefox session. (completed 2026-08-20 11:10 AM EDT)
+  - Curiosity poke: test request path, response shape, and stale-result handling independently so a transport error cannot masquerade as an empty valid result.
+  - Result: the live regression reproduced the legacy-origin 403; every filter now uses its api-v2 resource, api-v2 album discriminators are shared with the Library, and all four result types return live data.
+- [x] Run the complete deterministic, live Firefox, Nix test, and release-build gates for Search. (completed 2026-08-20 11:10 AM EDT)
+  - Result: 52 deterministic tests, all 5 live Firefox checks, `./test`, and `./build` pass.
+- [ ] Commit the passing Search, album-classifier, live-playback-check, documentation, and PLAN unit.
 
 Future testing note: Peter and Einstein are preparing a libghostty-based terminal emulator path that should provide better objective TUI interaction tests than tmux. It is intentionally outside this work unit until its interface is ready.

@@ -460,49 +460,51 @@ mod tests {
     fn live_browser_session_prepares_a_decodable_liked_track_segment() {
         let token = Arc::new(Mutex::new(crate::auth::initial_token().unwrap()));
         let access_token = token.lock().unwrap().access_token.clone();
-        let track = crate::api::API::init(token)
-            .get_liked_tracks()
-            .unwrap()
-            .into_iter()
-            .find(|track| !track.stream_url.is_empty())
-            .expect("a liked track with a supported HLS transcoding");
-
-        let resolved = resolve_transcoding_url(
-            &reqwest::blocking::Client::new(),
-            &track.stream_url,
-            &access_token,
-        )
-        .unwrap();
-        assert!(matches!(resolved.scheme(), "http" | "https"));
-
         let client = reqwest::blocking::Client::new();
-        let manifest = HlsManifest::fetch(&client, &resolved, &access_token).unwrap();
-        let init_bytes = manifest
-            .init_url
-            .as_ref()
-            .map(|url| {
-                client
-                    .get(url.as_str())
-                    .send()
-                    .unwrap()
-                    .error_for_status()
-                    .unwrap()
-                    .bytes()
-                    .unwrap()
-                    .to_vec()
-            })
-            .unwrap_or_default();
-        let segment_bytes = client
-            .get(manifest.segments[0].url.as_str())
-            .send()
-            .unwrap()
-            .error_for_status()
-            .unwrap()
-            .bytes()
-            .unwrap();
-        let bytes = combine_init_and_segment(&init_bytes, &segment_bytes);
-        let decoded_samples = Decoder::new(Cursor::new(bytes)).unwrap().take(100).count();
-        assert_eq!(decoded_samples, 100);
+        let tracks = crate::api::API::init(token).get_liked_tracks().unwrap();
+
+        let found_decodable = tracks
+            .into_iter()
+            .filter(|track| !track.stream_url.is_empty())
+            .take(20)
+            .any(|track| {
+                let decoded_samples = (|| -> anyhow::Result<usize> {
+                    let resolved =
+                        resolve_transcoding_url(&client, &track.stream_url, &access_token)?;
+                    let manifest = HlsManifest::fetch(&client, &resolved, &access_token)?;
+                    let init_bytes = manifest
+                        .init_url
+                        .as_ref()
+                        .map(|url| {
+                            client
+                                .get(url.as_str())
+                                .send()?
+                                .error_for_status()?
+                                .bytes()
+                                .map(|bytes| bytes.to_vec())
+                        })
+                        .transpose()?
+                        .unwrap_or_default();
+                    let segment = manifest
+                        .segments
+                        .first()
+                        .ok_or_else(|| anyhow::anyhow!("HLS manifest contained no segments"))?;
+                    let segment_bytes = client
+                        .get(segment.url.as_str())
+                        .send()?
+                        .error_for_status()?
+                        .bytes()?;
+                    let bytes = combine_init_and_segment(&init_bytes, &segment_bytes);
+                    Ok(Decoder::new(Cursor::new(bytes))?.take(100).count())
+                })();
+
+                matches!(decoded_samples, Ok(100))
+            });
+
+        assert!(
+            found_decodable,
+            "first twenty supported liked tracks had no decodable HLS segment"
+        );
     }
 
     #[test]

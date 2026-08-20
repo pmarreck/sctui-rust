@@ -4,7 +4,7 @@ use reqwest::blocking::Client;
 use crate::auth::{Token, try_refresh_token};
 
 use super::super::utils::{
-    format_duration, parse_str, parse_track, parse_u64, playlist_tracks_uri,
+    format_duration, is_album, parse_str, parse_track, parse_u64, playlist_tracks_uri,
 };
 use crate::api::{
     API, API_V2_BASE_URL, Playlist, Track, get_v2_json_async, v2_resource_path,
@@ -27,7 +27,7 @@ impl API {
             let Some(playlist) = item.get("playlist").filter(|value| !value.is_null()) else {
                 continue;
             };
-            if parse_str(playlist, "playlist_type").eq_ignore_ascii_case("album") {
+            if is_album(playlist) {
                 continue;
             }
 

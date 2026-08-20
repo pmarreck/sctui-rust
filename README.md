@@ -18,6 +18,8 @@ Firefox fallback supports standard Firefox, Snap Firefox, and Flatpak Firefox pr
 
 SoundCloud rejects browser-session tokens on several legacy `api.soundcloud.com` routes. For Firefox sessions, `sctui` resolves the signed-in user through api-v2 and uses its user-scoped likes, library, following, playlist, album, and followed-person track collections.
 
+Search also uses api-v2 resources for Tracks, Albums, Playlists, and People. Album results recognize both legacy and api-v2 album discriminators.
+
 Playback likewise uses the API-v2 transcoding metadata returned with each track. Playback failures are shown in red in the status line for at least six seconds while `sctui` advances through the manual queue and current collection until a track starts or no candidates remain. When SoundCloud marks a track as Go+ high-tier content, `sctui` reports that its encrypted playback is unsupported instead of displaying the 404 from SoundCloud's obsolete fallback resolver.
 
 ## Controls
@@ -42,7 +44,7 @@ Track clicks, wheel selection, and Enter playback use the same active track-pane
 
 Run `./build` for the pinned, sandboxed release build. The executable is installed at `result/bin/sctui`; this checkout's `bin` symlink exposes it as `bin/sctui`.
 
-Run the same build and test derivation used by Mechatron Prime with `./test`. Its underlying command is:
+Run the same build and test derivation used by Mechatron Prime with `./test`. The upstream project ran `cargo test` but contained no project tests at this fork's base commit; this fork's Rust tests cover authentication, API routes and parsing, playback, input, and deterministic TUI rendering. Its underlying command is:
 
 ```sh
 nix build .#checks.x86_64-linux.default

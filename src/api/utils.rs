@@ -52,6 +52,16 @@ pub(crate) fn playlist_tracks_uri(playlist: &serde_json::Value) -> String {
         .unwrap_or_default()
 }
 
+/// Recognizes album discriminators returned by both legacy and api-v2 playlist objects.
+pub(crate) fn is_album(playlist: &serde_json::Value) -> bool {
+    playlist
+        .get("is_album")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+        || parse_str(playlist, "set_type").eq_ignore_ascii_case("album")
+        || parse_str(playlist, "playlist_type").eq_ignore_ascii_case("album")
+}
+
 /// Selects the preferred non-DRM HLS resolver from a complete transcoding set.
 /// MPEG audio is preferred because the playback engine already decodes it reliably.
 pub(crate) fn select_hls_transcoding_url(transcodings: &[serde_json::Value]) -> Option<String> {
@@ -168,7 +178,24 @@ pub(crate) fn parse_next_href(resp: &serde_json::Value) -> Option<String> {
 mod tests {
     use crate::api::PlaybackRestriction;
 
-    use super::{parse_track, select_hls_transcoding_url};
+    use super::{is_album, parse_track, select_hls_transcoding_url};
+
+    #[test]
+    fn album_classifier_covers_legacy_and_api_v2_discriminator_sets() {
+        let candidates = [
+            serde_json::json!({"playlist_type":"album"}),
+            serde_json::json!({"set_type":"ALBUM"}),
+            serde_json::json!({"is_album":true}),
+            serde_json::json!({"playlist_type":"playlist"}),
+            serde_json::json!({"set_type":"playlist","is_album":false}),
+            serde_json::json!({}),
+        ];
+
+        assert_eq!(
+            candidates.iter().map(is_album).collect::<Vec<_>>(),
+            vec![true, true, true, false, false, false]
+        );
+    }
 
     #[test]
     fn hls_selection_classifies_the_complete_candidate_set() {
