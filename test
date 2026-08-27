@@ -5,6 +5,18 @@ set -u
 system="$(nix eval --raw --impure --expr builtins.currentSystem)"
 failures=0
 
+if grep -q 'dtolnay/rust-toolchain@stable' .github/workflows/ci.yml; then
+	printf '%s\n' 'CI Rust pin check failed: floating stable toolchain remains' >&2
+	failures=$((failures + 1))
+fi
+
+pin_count="$(grep -c '^[[:space:]]*toolchain: 1\.97\.1$' .github/workflows/ci.yml)"
+if [ "$pin_count" -ne 3 ]; then
+	printf 'CI Rust pin check failed: expected 3 stable lanes pinned to 1.97.1, found %s\n' \
+		"$pin_count" >&2
+	failures=$((failures + 1))
+fi
+
 nix build ".#checks.${system}.default" || failures=$((failures + 1))
 
 exit "$failures"
