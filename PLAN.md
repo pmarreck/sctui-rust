@@ -113,5 +113,13 @@
   - Result: 52 deterministic tests, all 5 live Firefox checks, `./test`, and `./build` pass.
 - [x] Commit the passing Search, album-classifier, live-playback-check, documentation, and PLAN unit. (completed 2026-08-20 11:11 AM EDT)
   - Result: implementation commit `893b0fc` is locally recorded on `main`; webhook provisioning, push, and exact Mechatron verification remain pending.
+- [ ] Prefix the terminal tab title with a speaker emoji only while audio is actively playing, then remove it on pause, stop, or exit.
+  - Curiosity poke: avoid duplicate prefixes across redraws and track transitions, distinguish paused from playing, suppress escape output off-TTY, and use the standard OSC title protocol understood by WezTerm, Ghostty, and other compatible terminals.
+  - Mechanical result: 54 deterministic tests, canonical `./test`, and hermetic `./build` pass; the updated executable is at `bin/sctui`.
+  - Acceptance pending: verify persistent playback, pause, and resume titles in Ghostty. The short-lived `title` alias is overwritten by Ghostty's enabled prompt-title hook and is not equivalent to an active TUI.
 
-Future testing note: Peter and Einstein are preparing a libghostty-based terminal emulator path that should provide better objective TUI interaction tests than tmux. It is intentionally outside this work unit until its interface is ready.
+- [x] Apply and verify the Ghostty XDG title setting. (completed 2026-09-06 02:49 PM EDT)
+  - Ghostty parses no-cursor,no-title; the single-line config change is committed and pushed in dotconfig as 202d571. Existing shells need a fresh shell after config reload.
+- [x] Verify the pending title implementation with ./test and ./build. (completed 2026-09-06 02:49 PM EDT)
+- [ ] Push main and verify the exact Mechatron result using the ship and mechatron-ci skills. The signed push webhook exists and is active.
+- [ ] Follow up on Einstein's real-PTY libghostty pilot: deterministic fixture, keyboard/mouse/resize/exit scenario, and three mutation controls. Separate work unit after this shipment; see the 2026-08-20 inbox request.

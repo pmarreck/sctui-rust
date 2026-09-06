@@ -42,6 +42,7 @@ use self::utils::{
     take_next_recovery_candidate,
 };
 use super::render::render;
+use super::title::{PlaybackTitleState, clear_playback_title, update_terminal_title};
 
 const TAB_TITLES: [&str; 3] = ["Library", "Search", "Feed"];
 const SUBTAB_TITLES: [&str; 4] = ["Likes", "Playlists", "Albums", "Following"];
@@ -141,6 +142,7 @@ pub fn run(api: &mut Arc<Mutex<API>>, player: Player) -> anyhow::Result<()> {
     }
     let result = start(terminal, api, player);
     let mouse_result = ratatui::crossterm::execute!(std::io::stdout(), DisableMouseCapture);
+    clear_playback_title();
     ratatui::restore();
     result?;
     mouse_result?;
@@ -281,6 +283,7 @@ fn start(
     let mut last_tick = Instant::now();
     let interaction_started = Instant::now();
     let mut click_tracker = ClickTracker::default();
+    let mut playback_title = PlaybackTitleState::default();
 
     loop {
         data.apply_updates(
@@ -1129,6 +1132,7 @@ fn start(
             .and_then(|notice| notice.message_at(render_now))
             .map(str::to_string)
             .or_else(|| player.playback_error());
+        update_terminal_title(&mut playback_title, player.is_playing());
         terminal.draw(|frame| {
             render(
                 frame,

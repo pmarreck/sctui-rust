@@ -29,5 +29,6 @@ annotate=[
 	src/tui/render/overlays/help.rs = Renders the keyboard and mouse control reference popup.
 	src/tui/render/status.rs = Purely renders the approved scrolling shortcut line or red playback errors.
 	src/tui/render/tabs/search.rs = Renders Search collections and positions the native cursor over centered UTF-8 input.
+	src/tui/title.rs = Emits standard OSC 2 titles when playback changes between playing and stopped.
 	test = Runs the current-system Nix check and returns its accumulated failure count.
 ]

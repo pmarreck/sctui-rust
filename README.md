@@ -28,6 +28,8 @@ The italic status line between the active list and player shows every keyboard s
 
 Press `Ctrl-Q` to exit immediately from any view or input field. `Esc` opens the quit confirmation.
 
+While audio is actively playing, the terminal tab title begins with `🔊`. Pausing, stopping, or exiting removes the speaker marker through the standard OSC 2 title sequence.
+
 Mouse controls are also available:
 
 - Click a main tab, library section, or search filter to select it.
