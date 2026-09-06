@@ -73,7 +73,7 @@
 - [x] Make Enter submit Search and render a visible insertion point while editing. (completed 2026-08-19 04:33 PM EDT)
   - Curiosity poke: prevent Enter from falling through to track playback after results appear, and show the cursor at empty, middle, and end positions.
   - Result: edits wait for Enter, submission transfers focus to results, and the native terminal cursor tracks centered UTF-8 input without crossing the border.
-- [ ] Provision the signed `pmarreck/sctui-rust` Mechatron webhook and verify the next exact pushed commit.
+- [x] Provision the signed `pmarreck/sctui-rust` Mechatron webhook. (verified 2026-09-06 02:49 PM EDT)
   - Curiosity poke: run the all-owner dry run first and keep the HMAC secret out of arguments, logs, repository files, and chat.
 - [x] Automatically advance after a playback failure until a playable track starts or the queue is exhausted. (completed 2026-08-19 05:12 PM EDT)
   - Curiosity poke: handle both pre-classified restrictions and asynchronous resolver/decoder failures without retry loops, skipping manual-queue entries, or repeatedly selecting the same track.
@@ -88,7 +88,7 @@
   - Result: 45 deterministic tests pass, 2 live Firefox checks remain explicitly opt-in, and both `./test` and `./build` pass in Nix.
 - [x] Commit the passing playback-recovery and Ctrl-Q unit. (completed 2026-08-19 05:13 PM EDT)
   - Result: implementation commit `385b455` is locally recorded on `main` with the Nix gates passing.
-- [ ] Push and verify the exact commits after the signed webhook is provisioned.
+- [x] Push and verify the exact commits after the signed webhook is provisioned. (completed 2026-09-06 02:49 PM EDT)
   - Dependency: pushing remains ordered after the signed webhook so Mechatron Prime can observe and verify the exact commits.
 - [x] Reproduce and fix mouse wheel, track clicking, and Enter playback across Playlists, Albums, and Following through one shared event-target path. (completed 2026-08-19 06:11 PM EDT)
   - Curiosity poke: distinguish left-pane collection selection from right-pane track selection, preserve Following's Published/Likes focus, and test empty/loading panes without duplicating Likes-only dispatch.
@@ -102,7 +102,7 @@
   - Result: implementation commit `ca5f1dd` is locally recorded on `main` with all deterministic, live Firefox, Nix test, and release-build gates passing.
 - [ ] Diagnose the Mechatron badge 404, provision the signed webhook with explicit approval, push `main`, and verify the exact commit reaches `PASSING`.
   - Curiosity poke: distinguish correct badge Markdown from a missing first accepted build; verify queue admission rather than trusting GitHub's webhook HTTP status.
-  - Finding: the canonical badge and flake target are correct, but the public endpoint is 404, GitHub has no repository webhook, and Mechatron has no queued or completed run; privileged provisioning awaits Peter's explicit approval.
+  - Update 2026-09-06: webhook 668298171 is active; signed push 792d117 was admitted. The badge awaits the first build while the shared worker finishes earlier jobs.
 - [x] Determine from upstream Git history which tests existed before the fork work and whether upstream actually ran them. (completed 2026-08-20 11:10 AM EDT)
   - Curiosity poke: separate test functions from a complete test entry point and compare the fork point rather than today's tree.
   - Result: upstream CI invoked `cargo test --all-features --all-targets` on macOS and Windows, but the fork point contained zero test files and zero test functions; this fork introduced its first 14 tests in `cba90c7`.
@@ -121,5 +121,5 @@
 - [x] Apply and verify the Ghostty XDG title setting. (completed 2026-09-06 02:49 PM EDT)
   - Ghostty parses no-cursor,no-title; the single-line config change is committed and pushed in dotconfig as 202d571. Existing shells need a fresh shell after config reload.
 - [x] Verify the pending title implementation with ./test and ./build. (completed 2026-09-06 02:49 PM EDT)
-- [ ] Push main and verify the exact Mechatron result using the ship and mechatron-ci skills. The signed push webhook exists and is active.
+- [ ] Verify the exact Mechatron result using the ship and mechatron-ci skills. Implementation 792d117 is pushed and origin/main equality was verified; the signed event is queued.
 - [ ] Follow up on Einstein's real-PTY libghostty pilot: deterministic fixture, keyboard/mouse/resize/exit scenario, and three mutation controls. Separate work unit after this shipment; see the 2026-08-20 inbox request.
