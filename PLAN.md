@@ -100,7 +100,7 @@
   - Result: 50 deterministic tests and all 4 opt-in live Firefox checks pass; `./test` and `./build` pass, and `bin/sctui` resolves to the new Nix store executable.
 - [x] Commit the passing nested-library interaction and retained-error unit. (completed 2026-08-19 06:12 PM EDT)
   - Result: implementation commit `ca5f1dd` is locally recorded on `main` with all deterministic, live Firefox, Nix test, and release-build gates passing.
-- [ ] Diagnose the Mechatron badge 404, provision the signed webhook with explicit approval, push `main`, and verify the exact commit reaches `PASSING`.
+- [x] Diagnose the Mechatron badge 404, provision the signed webhook with explicit approval, push `main`, and verify the exact commit reaches `PASSING`. (completed 2026-09-06 03:00 PM EDT)
   - Curiosity poke: distinguish correct badge Markdown from a missing first accepted build; verify queue admission rather than trusting GitHub's webhook HTTP status.
   - Update 2026-09-06: webhook 668298171 is active; signed push 792d117 was admitted. The badge awaits the first build while the shared worker finishes earlier jobs.
 - [x] Determine from upstream Git history which tests existed before the fork work and whether upstream actually ran them. (completed 2026-08-20 11:10 AM EDT)
@@ -121,5 +121,7 @@
 - [x] Apply and verify the Ghostty XDG title setting. (completed 2026-09-06 02:49 PM EDT)
   - Ghostty parses no-cursor,no-title; the single-line config change is committed and pushed in dotconfig as 202d571. Existing shells need a fresh shell after config reload.
 - [x] Verify the pending title implementation with ./test and ./build. (completed 2026-09-06 02:49 PM EDT)
-- [ ] Verify the exact Mechatron result using the ship and mechatron-ci skills. Implementation 792d117 is pushed and origin/main equality was verified; the signed event is queued.
+- [x] Verify the exact Mechatron result using the ship and mechatron-ci skills. (completed 2026-09-06 03:00 PM EDT)
+  - Commit c190e645ab7cd6366fbb7ea2e020f814713381f2 succeeded in 5 seconds at 02:59 PM EDT; the public badge reports PASSING. It includes implementation 792d117, which the queue superseded.
+  - Separate dotconfig commit 202d571 is pushed and parser-verified; Mechatron rejected that repository because it has no target manifest. Config-repository CI setup remains outside this shipment.
 - [ ] Follow up on Einstein's real-PTY libghostty pilot: deterministic fixture, keyboard/mouse/resize/exit scenario, and three mutation controls. Separate work unit after this shipment; see the 2026-08-20 inbox request.
