@@ -48,6 +48,82 @@ const TAB_TITLES: [&str; 3] = ["Library", "Search", "Feed"];
 const SUBTAB_TITLES: [&str; 4] = ["Likes", "Playlists", "Albums", "Following"];
 const SEARCHFILTERS: [&str; 4] = ["Tracks", "Albums", "Playlists", "People"];
 
+/// Keeps optional graphics probing from blocking startup or resize in embedded terminals.
+fn resolve_image_picker(result: Result<Picker, Errors>, notice: &mut Option<String>) -> Picker {
+    match result {
+        Ok(picker) => {
+            *notice = None;
+            picker
+        }
+        Err(error) => {
+            *notice = Some(format!("Text artwork fallback: {error}"));
+            let mut picker = Picker::from_fontsize((10, 20));
+            // Guessed dimensions are suitable for text cells, never pixel protocols.
+            picker.set_protocol_type(ratatui_image::picker::ProtocolType::Halfblocks);
+            picker
+        }
+    }
+}
+
+/// Reports optional download/encoding failures without terminating playback.
+fn optional_artwork<T, E: std::fmt::Display>(result: Result<T, E>, notice: &mut Option<String>) -> Option<T> {
+    match result {
+        Ok(value) => {
+            *notice = None;
+            Some(value)
+        }
+        Err(error) => {
+            *notice = Some(format!("Cover art unavailable: {error}"));
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod image_picker_tests {
+    use super::*;
+    use ratatui_image::picker::ProtocolType;
+
+    #[test]
+    fn missing_font_size_uses_text_halfblocks() {
+        let mut notice = None;
+        let picker = resolve_image_picker(Err(Errors::NoFontSize), &mut notice);
+        assert_eq!(picker.protocol_type(), ProtocolType::Halfblocks);
+        assert_eq!(picker.font_size(), (10, 20));
+        assert_eq!(notice.as_deref(), Some("Text artwork fallback: Could not detect font size"));
+    }
+
+    #[test]
+    fn detected_pixel_protocol_and_font_size_are_preserved() {
+        let mut detected = Picker::from_fontsize((9, 18));
+        detected.set_protocol_type(ProtocolType::Kitty);
+        let mut notice = None;
+        let picker = resolve_image_picker(Ok(detected), &mut notice);
+        assert_eq!(picker.protocol_type(), ProtocolType::Kitty);
+        assert_eq!(picker.font_size(), (9, 18));
+    }
+
+    #[test]
+    fn failed_probes_all_fall_back_with_an_explanation() {
+        for error in [Errors::NoFontSize, Errors::NoCap, Errors::NoStdinResponse, Errors::Tmux("unsupported"), Errors::Io(std::io::Error::other("probe failed"))] {
+            let expected = format!("Text artwork fallback: {error}");
+            let mut notice = None;
+            let picker = resolve_image_picker(Err(error), &mut notice);
+            assert_eq!(picker.protocol_type(), ProtocolType::Halfblocks);
+            assert_eq!(notice, Some(expected));
+        }
+    }
+
+    #[test]
+    fn optional_artwork_errors_are_visible_and_success_clears_them() {
+        let mut notice = None;
+        assert_eq!(optional_artwork::<u8, _>(Err("decoder failed"), &mut notice), None);
+        assert_eq!(notice.as_deref(), Some("Cover art unavailable: decoder failed"));
+        assert_eq!(optional_artwork::<_, &str>(Ok(7), &mut notice), Some(7));
+        assert_eq!(notice, None);
+    }
+}
+
 enum AppEvent {
     Redraw(Result<ResizeResponse, Errors>),
 }
@@ -256,7 +332,12 @@ fn start(
         api.get_playlists()
     });
 
-    let mut picker = Picker::from_query_stdio()?;
+    let mut terminal_notice = None;
+    let mut artwork_notice = None;
+    let mut picker = resolve_image_picker(Picker::from_query_stdio(), &mut terminal_notice);
+    let artwork_client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()?;
 
     let (tx_worker, rx_worker) = mpsc::channel::<ResizeRequest>();
     let (tx_main, rx_main) = mpsc::channel::<AppEvent>();
@@ -264,11 +345,9 @@ fn start(
     {
         let tx_main_render = tx_main.clone();
         std::thread::spawn(move || {
-            loop {
-                if let Ok(request) = rx_worker.recv() {
-                    tx_main_render
-                        .send(AppEvent::Redraw(request.resize_encode()))
-                        .unwrap();
+            while let Ok(request) = rx_worker.recv() {
+                if tx_main_render.send(AppEvent::Redraw(request.resize_encode())).is_err() {
+                    break;
                 }
             }
         });
@@ -514,7 +593,11 @@ fn start(
         while let Ok(app_ev) = rx_main.try_recv() {
             match app_ev {
                 AppEvent::Redraw(completed) => {
-                    let _ = cover_art_async.update_resized_protocol(completed?);
+                    if let Some(completed) = optional_artwork(completed, &mut artwork_notice) {
+                        let _ = cover_art_async.update_resized_protocol(completed);
+                    } else {
+                        cover_art_async.empty_protocol();
+                    }
                 }
             }
         }
@@ -526,16 +609,20 @@ fn start(
         };
 
         if should_update {
-            if let Ok(resp) = reqwest::blocking::get(url.as_str()) {
-                if let Ok(bytes) = resp.bytes() {
-                    if let Ok(dyn_img) = image::load_from_memory(&bytes) {
-                        let resize_proto = picker.new_resize_protocol(dyn_img.clone());
-                        cover_art_async =
-                            ThreadProtocol::new(tx_worker.clone(), Some(resize_proto));
-
-                        last_artwork_url = Some(url.clone());
-                        last_artwork_image = Some(dyn_img);
-                    }
+            // Record attempted URLs too: a failed image must not retry on every frame.
+            last_artwork_url = Some(url.clone());
+            last_artwork_image = None;
+            cover_art_async.empty_protocol();
+            artwork_notice = None;
+            if !url.is_empty() {
+                let loaded = (|| -> anyhow::Result<DynamicImage> {
+                    let bytes = artwork_client.get(url).send()?.error_for_status()?.bytes()?;
+                    Ok(image::load_from_memory(&bytes)?)
+                })();
+                if let Some(dyn_img) = optional_artwork(loaded, &mut artwork_notice) {
+                    let resize_proto = picker.new_resize_protocol(dyn_img.clone());
+                    cover_art_async = ThreadProtocol::new(tx_worker.clone(), Some(resize_proto));
+                    last_artwork_image = Some(dyn_img);
                 }
             }
         }
@@ -1131,7 +1218,9 @@ fn start(
             .as_ref()
             .and_then(|notice| notice.message_at(render_now))
             .map(str::to_string)
-            .or_else(|| player.playback_error());
+            .or_else(|| player.playback_error())
+            .or_else(|| artwork_notice.clone())
+            .or_else(|| terminal_notice.clone());
         update_terminal_title(&mut playback_title, player.is_playing());
         terminal.draw(|frame| {
             render(
@@ -1238,7 +1327,7 @@ fn start(
                     }
                 }
                 Event::Resize(_, _) => {
-                    picker = Picker::from_query_stdio()?;
+                    picker = resolve_image_picker(Picker::from_query_stdio(), &mut terminal_notice);
                     if let Some(image) = last_artwork_image.as_ref() {
                         let resize_proto = picker.new_resize_protocol(image.clone());
                         cover_art_async =
@@ -1555,7 +1644,7 @@ fn start(
                     state.visualizer_mode,
                     &wave_buffer,
                     state.visualizer_view,
-                    player.playback_error(),
+                    player.playback_error().or_else(|| artwork_notice.clone()).or_else(|| terminal_notice.clone()),
                     (interaction_started.elapsed().as_millis() / 500) as usize,
                 )
             })?;

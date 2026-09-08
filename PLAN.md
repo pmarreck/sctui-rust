@@ -1,5 +1,10 @@
 # Plan
 
+- [x] Fix startup and resize failure when herdr cannot report font size; explain probe failures and preserve detected protocols. (completed 2026-09-08 03:48 PM EDT)
+  - Curiosity poke: guessed cell dimensions must only be used for text halfblocks, never pixel graphics.
+- [x] Make optional artwork failures nonfatal and visible in the status line; avoid repeated failed downloads on every redraw and preserve playback-error priority. (completed 2026-09-08 03:48 PM EDT)
+  - Regression witnessed NoFontSize and missing error notices fail before the fix. All 58 deterministic tests, ./test, and ./build pass; 5 live SoundCloud checks remain opt-in. Actual rendering inside herdr remains a manual acceptance check.
+
 - [x] Add a pinned, hermetic Nix flake that builds `sctui` from `Cargo.lock`. (2026-08-14 04:49 PM EDT)
   - Curiosity poke: identify every native library required by the audio and TLS crates without leaking host dependencies.
 - [x] Verify `nix build` succeeds and installs the executable at `result/bin/sctui`. (2026-08-14 04:49 PM EDT)

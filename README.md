@@ -24,6 +24,8 @@ Playback likewise uses the API-v2 transcoding metadata returned with each track.
 
 ## Controls
 
+In embedded terminals, unavailable graphics/font-size queries fall back to text halfblock artwork. The status line explains the fallback or reports cover-art download/encoding errors; these optional failures do not stop playback. Failed artwork URLs are attempted once per URL change, with a five-second request timeout. Press `Shift+H` for shortcuts while a capability notice occupies the status line. Mouse, colors, and title updates still depend on support from the host terminal.
+
 The italic status line between the active list and player shows every keyboard shortcut in a scrolling marquee. Press `Shift+H` for the full help popup.
 
 Press `Ctrl-Q` to exit immediately from any view or input field. `Esc` opens the quit confirmation.
