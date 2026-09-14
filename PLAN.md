@@ -8,7 +8,8 @@
   - Check expiry and repeated resize failures with injected timestamps.
 - [x] Run the full test suite and release build. (completed 2026-09-14 05:25 PM EDT)
   - Four regressions witnessed failing before implementation; 63 deterministic tests now pass and 5 live-service tests remain opt-in. Expanded stream-set tests also caught and prevented a legacy fallback regression. Actual terminal feel remains Peter's acceptance check.
-- [ ] Commit, push, and verify Mechatron CI for the shuffle and playback-notice changes.
+- [x] Commit, push, and verify Mechatron CI for the shuffle and playback-notice changes. (completed 2026-09-14 05:26 PM EDT)
+  - Implementation `fa819ae9d3985a0a363a1e3b2b1ac318ca999774` matches origin/main and passed Mechatron in five seconds. `bin/sctui` points to the rebuilt release. The project-intentions skill added INTENT.md from Peter's established requests.
 
 - [x] Fix startup and resize failure when herdr cannot report font size; explain probe failures and preserve detected protocols. (completed 2026-09-08 03:48 PM EDT)
   - Curiosity poke: guessed cell dimensions must only be used for text halfblocks, never pixel graphics.
