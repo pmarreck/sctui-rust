@@ -2,6 +2,7 @@
 ver=1.2
 annotate=[
 	.mechatron-prime/targets = Declares the exact x86_64-linux Nix check built by Mechatron Prime.
+	INTENT.md = Project purpose, requested outcomes, boundaries, and verification
 	PLAN.md = Tracks current work items, edge cases, and completion times.
 	README.md = Documents Firefox auth, controls, playback recovery, and reproducible build and test commands.
 	build = Runs the pinned hermetic Nix release build.

@@ -17,10 +17,10 @@ enum CharacterDestination {
     Ignore,
 }
 
-fn character_destination(selected_tab: usize, modifiers: KeyModifiers) -> CharacterDestination {
+fn character_destination(selected_tab: usize, modifiers: KeyModifiers, c: char) -> CharacterDestination {
     if selected_tab == 1 {
         CharacterDestination::SearchInput
-    } else if modifiers.contains(KeyModifiers::SHIFT) {
+    } else if modifiers.contains(KeyModifiers::SHIFT) || c.is_ascii_uppercase() {
         CharacterDestination::ShiftCommand
     } else if selected_tab == 0 {
         CharacterDestination::LibraryCommand
@@ -36,7 +36,7 @@ pub(crate) fn handle_char(
     data: &mut AppData,
     player: &Player,
 ) -> InputOutcome {
-    match character_destination(state.selected_tab, key.modifiers) {
+    match character_destination(state.selected_tab, key.modifiers, c) {
         CharacterDestination::SearchInput => handle_search_char(c, state),
         CharacterDestination::ShiftCommand => handle_shift_char(c, state, data, player),
         CharacterDestination::LibraryCommand => handle_space(c, player),
@@ -434,13 +434,20 @@ mod tests {
     #[test]
     fn shifted_characters_still_belong_to_search_input() {
         assert_eq!(
-            character_destination(1, KeyModifiers::SHIFT),
+            character_destination(1, KeyModifiers::SHIFT, 'S'),
             CharacterDestination::SearchInput
         );
         assert_eq!(
-            character_destination(0, KeyModifiers::SHIFT),
+            character_destination(0, KeyModifiers::SHIFT, 'S'),
             CharacterDestination::ShiftCommand
         );
+    }
+
+    #[test]
+    fn uppercase_shuffle_without_shift_metadata_is_a_command_except_in_search() {
+        assert_eq!(character_destination(0, KeyModifiers::NONE, 'S'), CharacterDestination::ShiftCommand);
+        assert_eq!(character_destination(1, KeyModifiers::NONE, 'S'), CharacterDestination::SearchInput);
+        assert_eq!(character_destination(0, KeyModifiers::NONE, 's'), CharacterDestination::LibraryCommand);
     }
 
     #[test]

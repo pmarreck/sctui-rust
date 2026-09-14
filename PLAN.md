@@ -1,5 +1,15 @@
 # Plan
 
+- [x] Make Likes shuffle reliable across terminal key encodings and document Shift+S. (completed 2026-09-14 05:24 PM EDT)
+  - Check uppercase S without a reported Shift modifier; preserve Search text entry.
+- [x] Improve playback restriction classification and explain ambiguous stream 404s without claiming proven DRM. (completed 2026-09-14 05:24 PM EDT)
+  - Check supported versus encrypted transcodings and retain uncertainty for missing media.
+- [x] Show the terminal graphics capability warning once for six seconds per session. (completed 2026-09-14 05:24 PM EDT)
+  - Check expiry and repeated resize failures with injected timestamps.
+- [x] Run the full test suite and release build. (completed 2026-09-14 05:25 PM EDT)
+  - Four regressions witnessed failing before implementation; 63 deterministic tests now pass and 5 live-service tests remain opt-in. Expanded stream-set tests also caught and prevented a legacy fallback regression. Actual terminal feel remains Peter's acceptance check.
+- [ ] Commit, push, and verify Mechatron CI for the shuffle and playback-notice changes.
+
 - [x] Fix startup and resize failure when herdr cannot report font size; explain probe failures and preserve detected protocols. (completed 2026-09-08 03:48 PM EDT)
   - Curiosity poke: guessed cell dimensions must only be used for text halfblocks, never pixel graphics.
 - [x] Make optional artwork failures nonfatal and visible in the status line; avoid repeated failed downloads on every redraw and preserve playback-error priority. (completed 2026-09-08 03:48 PM EDT)

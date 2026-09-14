@@ -112,7 +112,10 @@ fn classify_playback_restriction(
         _ => {}
     }
 
-    if stream_url.is_empty() {
+    // An obsolete stream_url must not override an explicit encrypted-only set.
+    if stream_url.is_empty()
+        || (!transcodings.is_empty() && select_hls_transcoding_url(transcodings).is_none())
+    {
         let has_encrypted_stream = transcodings.iter().any(|transcoding| {
             let protocol = transcoding
                 .get("format")
@@ -121,11 +124,12 @@ fn classify_playback_restriction(
                 .to_ascii_lowercase();
             protocol.starts_with("cbc-") || protocol.starts_with("ctr-")
         });
-        return Some(if has_encrypted_stream {
-            PlaybackRestriction::EncryptedStream
-        } else {
-            PlaybackRestriction::Unavailable
-        });
+        if has_encrypted_stream {
+            return Some(PlaybackRestriction::EncryptedStream);
+        }
+        if stream_url.is_empty() {
+            return Some(PlaybackRestriction::Unavailable);
+        }
     }
 
     None
@@ -285,5 +289,28 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(observed, expected);
+    }
+
+    #[test]
+    fn encrypted_only_metadata_overrides_a_legacy_stream_url() {
+        let observed = [
+            vec!["cbc-encrypted-hls"],
+            vec!["ctr-encrypted-hls"],
+            vec!["hls"],
+            vec!["cbc-encrypted-hls", "hls"],
+            vec!["progressive"],
+        ]
+            .map(|protocols| parse_track(&serde_json::json!({
+                "stream_url":"https://legacy/stream",
+                "media":{"transcodings":protocols.iter().map(|protocol| serde_json::json!({"url":"https://resolver/audio",
+                    "format":{"protocol":protocol,"mime_type":"audio/mpeg"}})).collect::<Vec<_>>()}
+            })).playback_restriction);
+        assert_eq!(observed, [
+            Some(PlaybackRestriction::EncryptedStream),
+            Some(PlaybackRestriction::EncryptedStream),
+            None,
+            None,
+            None,
+        ]);
     }
 }

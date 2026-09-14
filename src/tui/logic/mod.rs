@@ -48,6 +48,17 @@ const TAB_TITLES: [&str; 3] = ["Library", "Search", "Feed"];
 const SUBTAB_TITLES: [&str; 4] = ["Likes", "Playlists", "Albums", "Following"];
 const SEARCHFILTERS: [&str; 4] = ["Tracks", "Albums", "Playlists", "People"];
 
+/// The session remembers its first displayed capability warning even after expiry.
+fn terminal_notice_once<'a>(
+    message: Option<&'a str>,
+    first_seen: &mut Option<Duration>,
+    now: Duration,
+) -> Option<&'a str> {
+    let message = message?;
+    let started = *first_seen.get_or_insert(now);
+    (now.saturating_sub(started) < Duration::from_secs(6)).then_some(message)
+}
+
 /// Keeps optional graphics probing from blocking startup or resize in embedded terminals.
 fn resolve_image_picker(result: Result<Picker, Errors>, notice: &mut Option<String>) -> Picker {
     match result {
@@ -83,6 +94,17 @@ fn optional_artwork<T, E: std::fmt::Display>(result: Result<T, E>, notice: &mut 
 mod image_picker_tests {
     use super::*;
     use ratatui_image::picker::ProtocolType;
+
+    #[test]
+    fn terminal_warning_expires_and_does_not_restart_after_tracks_or_resizes() {
+        let mut first_seen = None;
+        assert_eq!(terminal_notice_once(None, &mut first_seen, Duration::ZERO), None);
+        for (seconds, expected) in [(10, Some("fallback")), (15, Some("fallback")), (16, None), (50, None)] {
+            assert_eq!(terminal_notice_once(Some("fallback"), &mut first_seen, Duration::from_secs(seconds)), expected);
+        }
+        assert_eq!(terminal_notice_once(None, &mut first_seen, Duration::from_secs(51)), None);
+        assert_eq!(terminal_notice_once(Some("new probe failure"), &mut first_seen, Duration::from_secs(52)), None);
+    }
 
     #[test]
     fn missing_font_size_uses_text_halfblocks() {
@@ -333,6 +355,7 @@ fn start(
     });
 
     let mut terminal_notice = None;
+    let mut terminal_notice_first_seen = None;
     let mut artwork_notice = None;
     let mut picker = resolve_image_picker(Picker::from_query_stdio(), &mut terminal_notice);
     let artwork_client = reqwest::blocking::Client::builder()
@@ -1220,7 +1243,7 @@ fn start(
             .map(str::to_string)
             .or_else(|| player.playback_error())
             .or_else(|| artwork_notice.clone())
-            .or_else(|| terminal_notice.clone());
+            .or_else(|| terminal_notice_once(terminal_notice.as_deref(), &mut terminal_notice_first_seen, render_now).map(str::to_owned));
         update_terminal_title(&mut playback_title, player.is_playing());
         terminal.draw(|frame| {
             render(
@@ -1644,7 +1667,7 @@ fn start(
                     state.visualizer_mode,
                     &wave_buffer,
                     state.visualizer_view,
-                    player.playback_error().or_else(|| artwork_notice.clone()).or_else(|| terminal_notice.clone()),
+                    player.playback_error().or_else(|| artwork_notice.clone()).or_else(|| terminal_notice_once(terminal_notice.as_deref(), &mut terminal_notice_first_seen, interaction_started.elapsed()).map(str::to_owned)),
                     (interaction_started.elapsed().as_millis() / 500) as usize,
                 )
             })?;

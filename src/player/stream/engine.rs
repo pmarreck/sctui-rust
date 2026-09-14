@@ -32,7 +32,13 @@ fn resolve_transcoding_url(
         .send()
         .context("failed to resolve SoundCloud transcoding")?
         .error_for_status()
-        .context("SoundCloud transcoding resolver returned error status")?
+        .map_err(|error| {
+            if error.status() == Some(reqwest::StatusCode::NOT_FOUND) {
+                anyhow::Error::new(error).context("HTTP 404: reason unknown (possibly DRM/Go+, region, removed media, or expired stream URL); cannot determine from this response")
+            } else {
+                anyhow::Error::new(error).context("SoundCloud transcoding resolver returned error status")
+            }
+        })?
         .json()
         .context("failed to parse SoundCloud transcoding response")?;
     let media_url = response
@@ -417,6 +423,22 @@ mod tests {
 
     use super::{Decoder, HlsManifest, combine_init_and_segment, resolve_transcoding_url};
     use std::io::Cursor;
+
+    #[test]
+    fn resolver_404_explains_uncertainty_instead_of_claiming_missing_track_or_drm() {
+        let server = Server::http("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/resolver", server.server_addr().to_ip().unwrap());
+        let responder = thread::spawn(move || {
+            server.recv_timeout(Duration::from_secs(2)).unwrap().unwrap()
+                .respond(Response::empty(404)).unwrap();
+        });
+        let error = resolve_transcoding_url(&reqwest::blocking::Client::new(), &url, "fixture").unwrap_err();
+        responder.join().unwrap();
+        let message = format!("{error:#}");
+        assert!(message.contains("HTTP 404"));
+        assert!(message.contains("DRM/Go+"));
+        assert!(message.contains("cannot determine"));
+    }
 
     #[test]
     fn transcoding_resolver_uses_browser_oauth_and_returns_signed_hls_url() {

@@ -481,6 +481,19 @@ mod tests {
     }
 
     #[test]
+    fn likes_shuffle_contains_every_other_playable_track_once() {
+        let mut tracks = (0..6).map(track).collect::<Vec<_>>();
+        tracks[1].playback_restriction = Some(crate::api::PlaybackRestriction::EncryptedStream);
+        tracks[4].access = "blocked".into();
+        let mut shuffled = super::build_queue(2, &tracks, true).into_iter().collect::<Vec<_>>();
+        shuffled.sort_unstable();
+        assert_eq!(shuffled, vec![0, 3, 5]);
+        assert_eq!(super::build_queue(2, &tracks, false), VecDeque::from([3, 5]));
+        assert!(super::build_queue(0, &[], true).is_empty());
+        assert!(super::build_queue(0, &[track(0)], true).is_empty());
+    }
+
+    #[test]
     fn playback_recovery_consumes_manual_then_automatic_candidates_once() {
         let tracks = vec![track(0), track(1), track(2)];
         let mut manual = VecDeque::from([queued(9)]);
