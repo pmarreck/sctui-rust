@@ -8,7 +8,8 @@
   - Added after the freeze diagnosis. Retain Alt+arrows seeking and test the exact three-second boundary.
 - [x] Run the full suite and release build. (completed 2026-09-14 07:14 PM EDT)
   - 66 deterministic tests, ./test, and ./build pass; five live-service checks remain opt-in. bin/sctui is rebuilt. Interactive acceptance remains Peter's check after restarting.
-- [ ] Push the navigation freeze fix and playback arrows, then verify exact-commit CI.
+- [x] Push the navigation freeze fix and playback arrows, then verify exact-commit CI. (completed 2026-09-14 07:15 PM EDT)
+  - Implementation db4928f71733587eb5cc57f3eab7b565f4ed9603 matches origin/main and passed Mechatron in four seconds.
 
 - [x] Make Likes shuffle reliable across terminal key encodings and document Shift+S. (completed 2026-09-14 05:24 PM EDT)
   - Check uppercase S without a reported Shift modifier; preserve Search text entry.
