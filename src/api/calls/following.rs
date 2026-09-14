@@ -18,7 +18,7 @@ impl API {
         }
 
         let user_id = self.ensure_my_user_id()?;
-        let token_guard = self.token.lock().unwrap();
+        let access_token = self.token.lock().unwrap().access_token.clone();
         let page = self.following_next_href.clone().unwrap_or_else(|| {
             format!("/users/{user_id}/followings?limit=40&linked_partitioning=true")
         });
@@ -27,10 +27,8 @@ impl API {
             &reqwest::blocking::Client::new(),
             &self.api_v2_base_url,
             &page,
-            &token_guard.access_token,
+            &access_token,
         )?;
-
-        drop(token_guard);
 
         self.following_next_href = parse_next_href(&resp);
 

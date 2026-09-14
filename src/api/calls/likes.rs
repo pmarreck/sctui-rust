@@ -15,7 +15,7 @@ impl API {
 
         let client = Client::new();
         let user_id = self.ensure_my_user_id()?;
-        let token_guard = self.token.lock().unwrap();
+        let access_token = self.token.lock().unwrap().access_token.clone();
 
         let page = self.liked_tracks_next_href.clone().unwrap_or_else(|| {
             format!(
@@ -27,10 +27,8 @@ impl API {
             &client,
             &self.api_v2_base_url,
             &page,
-            &token_guard.access_token,
+            &access_token,
         )?;
-
-        drop(token_guard);
 
         self.liked_tracks_next_href = parse_next_href(&resp);
         self.first_liked_tracks_page_fetched = true;
@@ -70,6 +68,30 @@ mod tests {
             }))
             .unwrap(),
         ))
+    }
+
+    #[test]
+    fn pending_library_requests_do_not_lock_playback_credentials() {
+        for following in [false, true] {
+            let server = Server::http("127.0.0.1:0").unwrap();
+            let base_url = format!("http://{}", server.server_addr().to_ip().unwrap());
+            let credentials = token("fixture");
+            let mut api = API::init_with_api_v2_base_url(Arc::clone(&credentials), base_url);
+            api.my_user_id = Some(123);
+            let worker = thread::spawn(move || {
+                if following {
+                    api.get_following().map(|items| items.len())
+                } else {
+                    api.get_liked_tracks().map(|items| items.len())
+                }
+            });
+            // Receiving the request proves the worker is waiting for this response.
+            let request = server.recv_timeout(Duration::from_secs(2)).unwrap().unwrap();
+            let credentials_available = credentials.try_lock().is_ok();
+            request.respond(Response::from_string(r#"{"collection":[]}"#)).unwrap();
+            assert_eq!(worker.join().unwrap().unwrap(), 0);
+            assert!(credentials_available, "network wait held credentials (following={following})");
+        }
     }
 
     #[test]

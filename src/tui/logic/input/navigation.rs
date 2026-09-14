@@ -5,6 +5,59 @@ use crate::player::Player;
 use crate::tui::logic::state::{AppData, AppState, FollowingTracksFocus, PlaybackSource};
 use crate::tui::logic::utils::{build_queue, build_search_matches};
 
+#[derive(Debug, PartialEq, Eq)]
+enum ArrowAction {
+    Section,
+    Seek,
+    Next,
+    Previous,
+    Restart,
+}
+
+const RESTART_THRESHOLD_MS: u64 = 3_000;
+
+fn arrow_action(right: bool, modifiers: KeyModifiers, elapsed_ms: u64) -> ArrowAction {
+    if modifiers.contains(KeyModifiers::ALT) {
+        ArrowAction::Seek
+    } else if modifiers.contains(KeyModifiers::SHIFT) {
+        if right { ArrowAction::Next } else { ArrowAction::Previous }
+    } else if modifiers.contains(KeyModifiers::CONTROL) {
+        ArrowAction::Section
+    } else if right {
+        ArrowAction::Next
+    } else if elapsed_ms < RESTART_THRESHOLD_MS {
+        ArrowAction::Previous
+    } else {
+        ArrowAction::Restart
+    }
+}
+
+#[cfg(test)]
+mod arrow_tests {
+    use super::*;
+
+    #[test]
+    fn playback_arrows_and_section_navigation_cover_modifiers_and_restart_boundary() {
+        let cases = [
+            (true, KeyModifiers::NONE, 0, ArrowAction::Next),
+            (true, KeyModifiers::NONE, 9_000, ArrowAction::Next),
+            (false, KeyModifiers::NONE, 0, ArrowAction::Previous),
+            (false, KeyModifiers::NONE, 2_999, ArrowAction::Previous),
+            (false, KeyModifiers::NONE, 3_000, ArrowAction::Restart),
+            (false, KeyModifiers::NONE, 9_000, ArrowAction::Restart),
+            (true, KeyModifiers::CONTROL, 9_000, ArrowAction::Section),
+            (false, KeyModifiers::CONTROL, 9_000, ArrowAction::Section),
+            (true, KeyModifiers::ALT, 9_000, ArrowAction::Seek),
+            (false, KeyModifiers::ALT, 9_000, ArrowAction::Seek),
+            (true, KeyModifiers::SHIFT, 9_000, ArrowAction::Next),
+            (false, KeyModifiers::SHIFT, 9_000, ArrowAction::Previous),
+        ];
+        let actual = cases.iter().map(|(right, modifiers, elapsed, _)| arrow_action(*right, *modifiers, *elapsed)).collect::<Vec<_>>();
+        let expected = cases.into_iter().map(|(_, _, _, action)| action).collect::<Vec<_>>();
+        assert_eq!(actual, expected);
+    }
+}
+
 pub(crate) fn handle_tab_switch(state: &mut AppState) -> InputOutcome {
     state.selected_tab = (state.selected_tab + 1) % 3;
     state.selected_row = 0;
@@ -18,14 +71,14 @@ pub(crate) fn handle_right_key(
     data: &mut AppData,
     player: &Player,
 ) -> InputOutcome {
-    if key.modifiers.contains(KeyModifiers::ALT) {
+    if arrow_action(true, key.modifiers, 0) == ArrowAction::Seek {
         if player.is_playing() || state.current_playing_index.is_some() {
             player.fast_forward();
         }
         return InputOutcome::Continue;
     }
 
-    if key.modifiers.contains(KeyModifiers::SHIFT) {
+    if arrow_action(true, key.modifiers, 0) == ArrowAction::Next {
         return handle_next_track(state, data, player);
     }
 
@@ -98,14 +151,20 @@ pub(crate) fn handle_left_key(
     data: &mut AppData,
     player: &Player,
 ) -> InputOutcome {
-    if key.modifiers.contains(KeyModifiers::ALT) {
+    let action = arrow_action(false, key.modifiers, player.elapsed());
+    if action == ArrowAction::Seek {
         if player.is_playing() || state.current_playing_index.is_some() {
             player.rewind();
         }
         return InputOutcome::Continue;
     }
 
-    if key.modifiers.contains(KeyModifiers::SHIFT) {
+    if action == ArrowAction::Restart {
+        player.seek(0);
+        return InputOutcome::Continue;
+    }
+
+    if action == ArrowAction::Previous {
         return handle_prev_track(state, data, player);
     }
 

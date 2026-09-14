@@ -1,5 +1,15 @@
 # Plan
 
+- [x] Reproduce and fix Right-arrow freezing the TUI during playback. (completed 2026-09-14 07:14 PM EDT)
+  - Check input dispatch, synchronous network work, and lock ordering; protect the cause with a deterministic regression test.
+  - Regression tests witnessed the request-preparation API lock and Likes credential lock block before the fixes. Request credentials are now captured once; Likes/Following release credential locks before HTTP.
+- [x] Keep navigation to Playlists responsive while its tracks load in the background, as Peter clarified. (completed 2026-09-14 07:14 PM EDT)
+- [x] Change plain Right to next track and plain Left to restart (previous track below three seconds); move section navigation to Ctrl+arrows and update Help. (completed 2026-09-14 07:14 PM EDT)
+  - Added after the freeze diagnosis. Retain Alt+arrows seeking and test the exact three-second boundary.
+- [x] Run the full suite and release build. (completed 2026-09-14 07:14 PM EDT)
+  - 66 deterministic tests, ./test, and ./build pass; five live-service checks remain opt-in. bin/sctui is rebuilt. Interactive acceptance remains Peter's check after restarting.
+- [ ] Push the navigation freeze fix and playback arrows, then verify exact-commit CI.
+
 - [x] Make Likes shuffle reliable across terminal key encodings and document Shift+S. (completed 2026-09-14 05:24 PM EDT)
   - Check uppercase S without a reported Shift modifier; preserve Search text entry.
 - [x] Improve playback restriction classification and explain ambiguous stream 404s without claiming proven DRM. (completed 2026-09-14 05:24 PM EDT)

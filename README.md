@@ -30,6 +30,10 @@ The italic status line between the active list and player shows every keyboard s
 
 Press `Ctrl-Q` to exit immediately from any view or input field. `Esc` opens the quit confirmation.
 
+`Right` skips to the next track. `Left` restarts the current track, or returns to the previous track when elapsed time is under three seconds. `Ctrl+Left/Right` changes the library section or Search filter. `Alt+Left/Right` seeks by ten seconds; `Shift+Left/Right` remains an unconditional previous/next shortcut.
+
+Collection and nested-track requests run in the background. Switching views does not wait for an in-flight API request to release its lock.
+
 Press `Shift+S` in Likes to toggle shuffle (the player shows `shf: ✔︎` when enabled). It shuffles the remaining playable queue without interrupting the current track or rearranging the list. Press it again to restore sequential playback. This also works for other library collections; on Search, uppercase `S` remains search text.
 
 Encrypted-only metadata takes precedence over obsolete stream URLs. If a stream resolver still returns HTTP 404 without a known restriction, the error explains that DRM/Go+, regional restrictions, removed media, or an expired stream URL may be responsible; the response alone cannot establish which.

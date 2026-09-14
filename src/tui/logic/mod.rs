@@ -264,12 +264,53 @@ where
     });
 }
 
+/// Capture the shared credential handle before background API requests begin.
+/// Preparing a request must never acquire the API's network-held mutex.
+struct RequestCredentials {
+    token: Arc<Mutex<crate::auth::Token>>,
+}
+
+impl RequestCredentials {
+    fn new(api: &Arc<Mutex<API>>) -> Self {
+        Self { token: api.lock().unwrap().token_clone() }
+    }
+
+    fn token_clone(&self) -> Arc<Mutex<crate::auth::Token>> {
+        Arc::clone(&self.token)
+    }
+}
+
+#[cfg(test)]
+mod request_credentials_tests {
+    use super::*;
+
+    #[test]
+    fn preparing_nested_requests_does_not_wait_for_a_background_api_fetch() {
+        let token = Arc::new(Mutex::new(serde_json::from_value::<crate::auth::Token>(
+            serde_json::json!({"access_token":"fixture", "refresh_token":"", "obtained_at":4_000_000_000_u64})
+        ).unwrap()));
+        let api = Arc::new(Mutex::new(API::init(Arc::clone(&token))));
+        let requests = RequestCredentials::new(&api);
+        let guard = api.lock().unwrap();
+        let (tx, rx) = mpsc::channel();
+        let worker = std::thread::spawn(move || { let _ = tx.send(requests.token_clone()); });
+        // The held guard makes blocking deterministic; the deadline only bounds a failure.
+        let result = rx.recv_timeout(Duration::from_secs(2));
+        drop(guard);
+        worker.join().unwrap();
+        assert!(result.is_ok(), "preparing a nested request waited for the API lock");
+        assert!(Arc::ptr_eq(&result.unwrap(), &token));
+    }
+}
+
 fn start(
     mut terminal: DefaultTerminal,
     api: &mut Arc<Mutex<API>>,
     player: Player,
 ) -> anyhow::Result<()> {
     let mut state = AppState::new();
+
+    let request_credentials = RequestCredentials::new(api);
 
     let mut api_guard = api.lock().unwrap();
     let mut data = AppData::new(&mut api_guard, state.selected_row)?;
@@ -559,10 +600,7 @@ fn start(
         }
 
         while let Some(action) = state.engagement_queue.pop_front() {
-            let token = {
-                let api_guard = api.lock().unwrap();
-                api_guard.token_clone()
-            };
+            let token = request_credentials.token_clone();
             let tx = tx_engagement.clone();
             async_rt.spawn(async move {
                 let result: anyhow::Result<EngagementDone> = match action {
@@ -714,10 +752,7 @@ fn start(
                     state.playlist_tracks_request_id =
                         state.playlist_tracks_request_id.wrapping_add(1);
                     let request_id = state.playlist_tracks_request_id;
-                    let token = {
-                        let api_guard = api.lock().unwrap();
-                        api_guard.token_clone()
-                    };
+                    let token = request_credentials.token_clone();
                     data.playlist_tracks_uri = Some(tracks_uri.clone());
                     data.playlist_tracks.clear();
                     data.playlist_tracks_state.select(Some(0));
@@ -766,10 +801,7 @@ fn start(
                     }
                     state.album_tracks_request_id = state.album_tracks_request_id.wrapping_add(1);
                     let request_id = state.album_tracks_request_id;
-                    let token = {
-                        let api_guard = api.lock().unwrap();
-                        api_guard.token_clone()
-                    };
+                    let token = request_credentials.token_clone();
                     data.album_tracks_uri = Some(tracks_uri.clone());
                     data.album_tracks.clear();
                     data.album_tracks_state.select(Some(0));
@@ -815,10 +847,7 @@ fn start(
                     state.following_tracks_request_id =
                         state.following_tracks_request_id.wrapping_add(1);
                     let request_id = state.following_tracks_request_id;
-                    let token = {
-                        let api_guard = api.lock().unwrap();
-                        api_guard.token_clone()
-                    };
+                    let token = request_credentials.token_clone();
                     data.following_tracks_user_urn = Some(user_urn.clone());
                     data.following_tracks.clear();
                     data.following_tracks_state.select(Some(0));
@@ -845,10 +874,7 @@ fn start(
                     state.following_likes_request_id =
                         state.following_likes_request_id.wrapping_add(1);
                     let request_id = state.following_likes_request_id;
-                    let token = {
-                        let api_guard = api.lock().unwrap();
-                        api_guard.token_clone()
-                    };
+                    let token = request_credentials.token_clone();
                     data.following_likes_user_urn = Some(user_urn.clone());
                     data.following_likes_tracks.clear();
                     data.following_likes_state.select(Some(0));
@@ -918,10 +944,7 @@ fn start(
                 state.search_people_likes_request_id.wrapping_add(1);
 
             let request_id = state.search_results_request_id;
-            let token = {
-                let api_guard = api.lock().unwrap();
-                api_guard.token_clone()
-            };
+            let token = request_credentials.token_clone();
             let query = state.query.clone();
             let filter = state.selected_searchfilter;
 
@@ -1045,10 +1068,7 @@ fn start(
                     state.search_playlist_tracks_request_id =
                         state.search_playlist_tracks_request_id.wrapping_add(1);
                     let request_id = state.search_playlist_tracks_request_id;
-                    let token = {
-                        let api_guard = api.lock().unwrap();
-                        api_guard.token_clone()
-                    };
+                    let token = request_credentials.token_clone();
                     data.search_playlist_tracks_uri = Some(tracks_uri.clone());
                     data.search_playlist_tracks.clear();
                     data.search_playlist_tracks_state.select(Some(0));
@@ -1091,10 +1111,7 @@ fn start(
                     state.search_album_tracks_request_id =
                         state.search_album_tracks_request_id.wrapping_add(1);
                     let request_id = state.search_album_tracks_request_id;
-                    let token = {
-                        let api_guard = api.lock().unwrap();
-                        api_guard.token_clone()
-                    };
+                    let token = request_credentials.token_clone();
                     data.search_album_tracks_uri = Some(tracks_uri.clone());
                     data.search_album_tracks.clear();
                     data.search_album_tracks_state.select(Some(0));
@@ -1140,10 +1157,7 @@ fn start(
                     state.search_people_tracks_request_id =
                         state.search_people_tracks_request_id.wrapping_add(1);
                     let request_id = state.search_people_tracks_request_id;
-                    let token = {
-                        let api_guard = api.lock().unwrap();
-                        api_guard.token_clone()
-                    };
+                    let token = request_credentials.token_clone();
                     data.search_people_tracks_user_urn = Some(user_urn.clone());
                     data.search_people_tracks.clear();
                     data.search_people_tracks_state.select(Some(0));
@@ -1170,10 +1184,7 @@ fn start(
                     state.search_people_likes_request_id =
                         state.search_people_likes_request_id.wrapping_add(1);
                     let request_id = state.search_people_likes_request_id;
-                    let token = {
-                        let api_guard = api.lock().unwrap();
-                        api_guard.token_clone()
-                    };
+                    let token = request_credentials.token_clone();
                     data.search_people_likes_user_urn = Some(user_urn.clone());
                     data.search_people_likes_tracks.clear();
                     data.search_people_likes_state.select(Some(0));

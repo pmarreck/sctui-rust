@@ -6,7 +6,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-const SHORTCUTS: &str = "Ctrl-Q Quit │ Esc Quit menu │ Tab Main tab │ ←/→ Section │ ↑/↓ Select │ Enter Play │ Space Pause │ ⇧←/→ Previous/next │ Alt←/→ Seek ±10s │ Alt↑/↓ Move ±10 │ ⇧↑/↓ Secondary │ ⇧J/K Tertiary │ ⇧U/D Volume │ ⇧S Shuffle │ ⇧R Repeat │ ⇧A Add queue │ ⇧N Play next │ ⇧L Like/follow │ ⇧V Visualizer │ ⇧F Find │ ⇧Q Queue │ ⇧H Help │ PgUp/PgDn Page │ Wheel Select │ ⇧Wheel ±5 │ Search Enter Submit";
+const SHORTCUTS: &str = "Ctrl-Q Quit │ Esc Quit menu │ Tab Main tab │ Ctrl←/→ Section │ ↑/↓ Select │ Enter Play │ Space Pause │ ← Restart/<3s Previous │ → Next │ ⇧←/→ Previous/next │ Alt←/→ Seek ±10s │ Alt↑/↓ Move ±10 │ ⇧↑/↓ Secondary │ ⇧J/K Tertiary │ ⇧U/D Volume │ ⇧S Shuffle │ ⇧R Repeat │ ⇧A Add queue │ ⇧N Play next │ ⇧L Like/follow │ ⇧V Visualizer │ ⇧F Find │ ⇧Q Queue │ ⇧H Help │ PgUp/PgDn Page │ Wheel Select │ ⇧Wheel ±5 │ Search Enter Submit";
 const MARQUEE_GAP: &str = "     ";
 
 /// Produces a deterministic one-line window over the complete shortcut list.
@@ -66,15 +66,15 @@ mod tests {
     fn approved_status_views_are_stable_at_common_widths() {
         assert_eq!(
             shortcut_window(120, 0),
-            "Ctrl-Q Quit │ Esc Quit menu │ Tab Main tab │ ←/→ Section │ ↑/↓ Select │ Enter Play │ Space Pause │ ⇧←/→ Previous/next │ "
+            "Ctrl-Q Quit │ Esc Quit menu │ Tab Main tab │ Ctrl←/→ Section │ ↑/↓ Select │ Enter Play │ Space Pause │ ← Restart/<3s Pre"
         );
         assert_eq!(
             shortcut_window(80, 0),
-            "Ctrl-Q Quit │ Esc Quit menu │ Tab Main tab │ ←/→ Section │ ↑/↓ Select │ Enter Pl"
+            "Ctrl-Q Quit │ Esc Quit menu │ Tab Main tab │ Ctrl←/→ Section │ ↑/↓ Select │ Ente"
         );
         assert_eq!(
             shortcut_window(120, 120),
-            "Alt←/→ Seek ±10s │ Alt↑/↓ Move ±10 │ ⇧↑/↓ Secondary │ ⇧J/K Tertiary │ ⇧U/D Volume │ ⇧S Shuffle │ ⇧R Repeat │ ⇧A Add queu"
+            "vious │ → Next │ ⇧←/→ Previous/next │ Alt←/→ Seek ±10s │ Alt↑/↓ Move ±10 │ ⇧↑/↓ Secondary │ ⇧J/K Tertiary │ ⇧U/D Volume "
         );
     }
 
